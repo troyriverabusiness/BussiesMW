@@ -1,23 +1,11 @@
 import os
-from contextlib import asynccontextmanager
-from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import SessionLocal, create_database_schema
 from routes.legal_cases import router as legal_cases_router
 from routes.status import router as status_router
 from routes.toto import router as toto_router
-from seed import seed_legal_cases
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    create_database_schema()
-    with SessionLocal() as db:
-        seed_legal_cases(db)
-    yield
 
 
 def create_application() -> FastAPI:
@@ -25,8 +13,7 @@ def create_application() -> FastAPI:
     application = FastAPI(
         title="BussiesMW API",
         version="0.1.0",
-        description="Legal-tech case orchestration API with PostgreSQL-backed case data.",
-        lifespan=lifespan,
+        description="Legal-tech case orchestration API backed by server-side Supabase calls.",
     )
 
     allowed_origins = os.getenv(

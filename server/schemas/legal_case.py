@@ -1,38 +1,48 @@
-from datetime import datetime
+from datetime import date, datetime
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from models.legal_case import LegalCaseStatus, PriorityRiskLevel
+
+class CaseStatus(str, Enum):
+    OPEN = "Open"
+    CLOSED = "Closed"
+    ACTION_REQUIRED = "Action Required"
+    AWAITING_COUNTERPARTY = "Awaiting Counterparty"
+    AWAITING_INTERNAL = "Awaiting Internal"
+
+
+class CasePriority(str, Enum):
+    LOW = "Low"
+    MEDIUM = "Medium"
+    HIGH = "High"
+    CRITICAL = "Critical"
 
 
 class LegalCaseResponse(BaseModel):
     id: UUID
-    case_number: str = Field(alias="caseNumber")
-    case_type: str = Field(alias="type")
-    issue_summary: str = Field(alias="issueSummary")
-    status: LegalCaseStatus
-    last_updated: datetime = Field(alias="lastUpdated")
-    recent: bool
+    title: str | None = None
+    department: str | None = None
+    status: CaseStatus
+    priority: CasePriority
+    next_due_date: date | None = Field(default=None, alias="nextDueDate")
+    internal: bool
+    plaintiff: str | None = None
+    defendant: str | None = None
+    court_authority: str | None = Field(default=None, alias="courtAuthority")
+    jurisdiction: str | None = None
+    claim_amount: float | None = Field(default=None, alias="claimAmount")
+    legal_issue: str | None = Field(default=None, alias="legalIssue")
+    case_facts: str | None = Field(default=None, alias="caseFacts")
+    information_gaps: str | None = Field(default=None, alias="informationGaps")
+    suggestion_action_items: str | None = Field(default=None, alias="suggestionActionItems")
+    last_update_date: datetime = Field(alias="lastUpdateDate")
+    source_documents: str | None = Field(default=None, alias="sourceDocuments")
+    case_summary: str | None = Field(default=None, alias="caseSummary")
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class LegalCaseDetailResponse(LegalCaseResponse):
-    case_type: str = Field(alias="caseType")
-    assigned_attorney: str = Field(alias="assignedAttorney")
-    created_date: datetime = Field(alias="createdDate")
-    last_updated_date: datetime = Field(alias="lastUpdatedDate")
-    tags: list[str]
-    short_summary: str = Field(alias="shortSummary")
-    plaintiff_name: str = Field(alias="plaintiffName")
-    compensation_amount: float = Field(alias="compensationAmount")
-    next_due_date: datetime = Field(alias="nextDueDate")
-    external_law_firm_involved: str = Field(alias="externalLawFirmInvolved")
-    court_involved: str = Field(alias="courtInvolved")
-    jurisdiction: str
-    priority_risk_level: PriorityRiskLevel = Field(alias="priorityRiskLevel")
-    last_correspondence: str = Field(alias="lastCorrespondence")
-    waiting_for: str = Field(alias="waitingFor")
-
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    pass

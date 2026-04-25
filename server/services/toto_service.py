@@ -17,16 +17,27 @@ class TotoService:
                     summary="I could not find that case in the legal case registry.",
                 )
 
+            status = str(legal_case.get("status") or "Unknown")
+            title = str(legal_case.get("title") or "Selected case")
+            priority = str(legal_case.get("priority") or "unknown")
+            next_due_date = legal_case.get("next_due_date") or "not scheduled"
+            action_items = str(
+                legal_case.get("suggestion_action_items")
+                or "Review the Supabase case record and confirm the next action."
+            )
+            case_summary = str(legal_case.get("case_summary") or legal_case.get("case_facts") or title)
+
             return TotoChatResponse(
-                status=legal_case.status.value,
-                lastCorrespondence=legal_case.last_correspondence,
-                waitingFor=legal_case.waiting_for,
+                status=status,
+                lastCorrespondence=str(
+                    legal_case.get("source_documents")
+                    or legal_case.get("last_update_date")
+                    or "No source document is attached to this case."
+                ),
+                waitingFor=action_items,
                 summary=(
-                    f"{legal_case.case_number} is currently {legal_case.status.value.lower()} with "
-                    f"{legal_case.assigned_attorney} assigned. The risk level is "
-                    f"{legal_case.priority_risk_level.value.lower()}, the next due date is "
-                    f"{legal_case.next_due_date:%B %-d, %Y}, and the current blocker is: "
-                    f"{legal_case.waiting_for}"
+                    f"{title} is currently {status.lower()} with {priority.lower()} priority. "
+                    f"The next due date is {next_due_date}. {case_summary}"
                 ),
             )
 
