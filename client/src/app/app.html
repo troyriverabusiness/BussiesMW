@@ -9,7 +9,7 @@
     </a>
 
     <label class="search-shell">
-      <span aria-hidden="true">⌕</span>
+      <span class="material-symbols-rounded" aria-hidden="true">search</span>
       <input
         type="search"
         placeholder="Search status, internal ID, type, or issue summary"
@@ -32,26 +32,66 @@
         <span>{{ filteredCases().length }} matching records</span>
       </div>
 
-      <div class="controls">
-        <div class="filter-group" aria-label="Filter cases by status">
-          <button
-            *ngFor="let filter of filters"
-            type="button"
-            [class.active]="activeFilter() === filter"
-            (click)="setFilter(filter)"
-          >
-            <span>{{ filter }}</span>
-            <strong>{{ filterCount(filter) }}</strong>
-          </button>
+      <div class="toolbar-actions">
+        <button
+          class="toto-toggle"
+          type="button"
+          title="Quick update chatbot for any case"
+          [attr.aria-expanded]="totoOpen()"
+          aria-controls="toto-panel"
+          (click)="toggleToto()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">forum</span>
+          <span>Toto</span>
+        </button>
+
+        <button
+          class="filter-toggle"
+          type="button"
+          [attr.aria-expanded]="filtersOpen()"
+          aria-controls="case-filters"
+          (click)="toggleFilters()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">tune</span>
+          <span>{{ filtersOpen() ? 'Hide filters' : 'Show filters' }}</span>
+          <span class="material-symbols-rounded chevron" aria-hidden="true">
+            {{ filtersOpen() ? 'expand_less' : 'expand_more' }}
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <div id="case-filters" class="filter-panel" [class.open]="filtersOpen()">
+      <div class="filter-content" aria-label="Case filters">
+        <div>
+          <span class="filter-label">Status</span>
+          <div class="filter-group" aria-label="Filter cases by status">
+            <button
+              *ngFor="let filter of filters"
+              type="button"
+              [class.active]="activeFilter() === filter"
+              (click)="setFilter(filter)"
+            >
+              <span>{{ filter }}</span>
+              <strong>{{ filterCount(filter) }}</strong>
+            </button>
+          </div>
         </div>
 
-        <label class="sort-control">
-          <span>Sort</span>
-          <select [value]="sortMode()" (change)="setSortMode($any($event.target).value)">
-            <option value="recent">Recently updated first</option>
-            <option value="oldest">Oldest updated first</option>
-          </select>
-        </label>
+        <div>
+          <span class="filter-label">Visibility</span>
+          <div class="filter-group" aria-label="Filter cases by recent state">
+            <button
+              *ngFor="let filter of recentFilters"
+              type="button"
+              [class.active]="activeRecentFilter() === filter.value"
+              (click)="setRecentFilter(filter.value)"
+            >
+              <span>{{ filter.label }}</span>
+              <strong>{{ recentFilterCount(filter.value) }}</strong>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -69,6 +109,7 @@
               <th scope="col">Issue summary</th>
               <th scope="col">Status</th>
               <th scope="col">Last updated</th>
+              <th scope="col" class="action-column">Toto</th>
             </tr>
           </thead>
           <tbody>
@@ -76,6 +117,7 @@
               *ngFor="let legalCase of paginatedCases(); let rowIndex = index; trackBy: trackCase"
               tabindex="0"
               role="button"
+              [class.recent-row]="legalCase.recent"
               (click)="openCase(legalCase)"
               (keydown.enter)="openCase(legalCase)"
               (keydown.space)="openCase(legalCase)"
@@ -85,7 +127,12 @@
                 <span class="case-type">{{ legalCase.type }}</span>
               </td>
               <td>
-                <span class="summary">{{ legalCase.issueSummary }}</span>
+                <span class="summary">
+                  {{ legalCase.issueSummary }}
+                  @if (legalCase.recent) {
+                    <span class="recent-badge">New</span>
+                  }
+                </span>
               </td>
               <td>
                 <span class="status-chip" [ngClass]="statusClass(legalCase.status)">
@@ -93,6 +140,17 @@
                 </span>
               </td>
               <td class="updated-column">{{ legalCase.lastUpdated | date: 'MMM d, y, HH:mm' }}</td>
+              <td class="action-column">
+                <button
+                  class="row-toto-button"
+                  type="button"
+                  title="Update with Toto"
+                  aria-label="Update with Toto"
+                  (click)="requestCaseUpdate(legalCase, $event)"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">chat</span>
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -116,3 +174,78 @@
 
   <footer class="footer">Copyright © 2026 Bussies</footer>
 </main>
+
+@if (totoOpen()) {
+  <aside id="toto-panel" class="toto-panel" aria-label="Toto quick case-update chatbot">
+    <div class="toto-header">
+      <div>
+        <span class="assistant-mark" aria-hidden="true">T</span>
+        <div>
+          <strong>Toto</strong>
+          <span>Quick case-update assistant</span>
+        </div>
+      </div>
+      <div class="toto-window-actions">
+        <button type="button" class="sound-toggle" (click)="toggleTotoMute()">
+          <span class="material-symbols-rounded" aria-hidden="true">
+            {{ totoMuted() ? 'volume_off' : 'volume_up' }}
+          </span>
+          <span>{{ totoMuted() ? 'Muted' : 'Sound on' }}</span>
+        </button>
+        <button type="button" class="close-toto" aria-label="Close Toto" (click)="toggleToto()">
+          <span class="material-symbols-rounded" aria-hidden="true">close</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="toto-messages" aria-live="polite">
+      <article
+        *ngFor="let message of totoMessages()"
+        class="toto-message"
+        [class.user]="message.role === 'user'"
+      >
+        <p>{{ message.text }}</p>
+        @if (message.caseId) {
+          <div class="case-reference">
+            <span>Internal case ID</span>
+            <code>{{ message.caseId }}</code>
+          </div>
+        }
+        @if (message.response) {
+          <dl>
+            <div>
+              <dt>Status</dt>
+              <dd>{{ message.response.status }}</dd>
+            </div>
+            <div>
+              <dt>Last correspondence</dt>
+              <dd>{{ message.response.lastCorrespondence }}</dd>
+            </div>
+            <div>
+              <dt>Waiting for</dt>
+              <dd>{{ message.response.waitingFor }}</dd>
+            </div>
+          </dl>
+        }
+      </article>
+      @if (totoLoading()) {
+        <article class="toto-message">
+          <p>Toto is checking the orchestration record...</p>
+        </article>
+      }
+    </div>
+
+    <form class="toto-input" (submit)="sendTotoDraft($event)">
+      <input
+        type="text"
+        placeholder="Ask Toto for a case update"
+        [value]="totoDraft()"
+        (input)="setTotoDraft($any($event.target).value)"
+      />
+      <button type="submit" [disabled]="!totoDraft().trim() || totoLoading()">
+        <span class="material-symbols-rounded" aria-hidden="true">send</span>
+        <span>Send</span>
+      </button>
+    </form>
+  </aside>
+}

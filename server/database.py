@@ -42,3 +42,9 @@ def create_database_schema() -> None:
                 "ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()"
             )
         )
+        connection.execute(
+            text(
+                "ALTER TABLE legal_cases "
+                "ADD COLUMN IF NOT EXISTS recent BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )

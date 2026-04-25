@@ -93,6 +93,7 @@ def build_demo_legal_cases() -> list[dict[str, object]]:
                 "issue_summary": issue_summary,
                 "status": STATUS_SEQUENCE[index % len(STATUS_SEQUENCE)],
                 "last_updated": base_time - timedelta(hours=index * 5 + (index % 4)),
+                "recent": index < 8 or index in {12, 18, 27, 36, 44},
             }
         )
 
@@ -104,7 +105,8 @@ DEMO_LEGAL_CASES = build_demo_legal_cases()
 
 def seed_legal_cases(db: Session) -> None:
     case_count = db.scalar(select(func.count()).select_from(LegalCase)) or 0
-    if case_count == len(DEMO_LEGAL_CASES):
+    recent_count = db.scalar(select(func.count()).select_from(LegalCase).where(LegalCase.recent.is_(True))) or 0
+    if case_count == len(DEMO_LEGAL_CASES) and recent_count > 0:
         return
 
     db.execute(delete(LegalCase))
