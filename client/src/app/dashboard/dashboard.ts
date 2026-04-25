@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 
 type LegalCaseStatus = 'Action Required' | 'Pending' | 'Closed';
@@ -38,6 +39,7 @@ interface TotoMessage {
 })
 export class DashboardComponent implements OnInit {
   private readonly http = inject(HttpClient);
+  private readonly router = inject(Router);
   private readonly apiUrl = `${this.apiOrigin}/api/v1/legal-cases`;
   private readonly totoApiUrl = `${this.apiOrigin}/api/v1/toto/chat`;
 
@@ -174,8 +176,7 @@ export class DashboardComponent implements OnInit {
   }
 
   openCase(legalCase: LegalCase): void {
-    // Keeps backend identifiers internal while preserving a concrete row action hook.
-    console.info('Open legal case', legalCase.id);
+    void this.router.navigate(['/cases', legalCase.id]);
   }
 
   private sendTotoRequest(request: string, caseId?: string): void {
