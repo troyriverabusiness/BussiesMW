@@ -4,7 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class TotoChatRequest(BaseModel):
-    request: str
+    request: str | None = None
+    message: str | None = None
     case_id: UUID | None = Field(default=None, alias="caseId")
 
     model_config = ConfigDict(populate_by_name=True)

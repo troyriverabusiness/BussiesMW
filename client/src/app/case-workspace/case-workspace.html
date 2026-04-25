@@ -1,0 +1,177 @@
+<main
+  class="case-shell"
+  [class.sidebar-collapsed]="sidebarCollapsed()"
+  [class.overview-hidden]="overviewHidden()"
+>
+  <header class="workspace-topbar">
+    <div>
+      <button
+        class="sidebar-toggle"
+        type="button"
+        aria-label="Toggle sidebar"
+        [attr.aria-expanded]="!sidebarCollapsed()"
+        (click)="toggleSidebar()"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">left_panel_open</span>
+      </button>
+
+      <a class="back-link" routerLink="/dashboard">
+        <span class="material-symbols-rounded" aria-hidden="true">arrow_back</span>
+        <span>Dashboard</span>
+      </a>
+    </div>
+
+    @if (legalCase(); as legalCase) {
+      <div class="topbar-case">
+        <span>{{ legalCase.caseNumber }}</span>
+        <strong>{{ legalCase.caseType }}</strong>
+      </div>
+    }
+  </header>
+
+  @if (isLoading()) {
+    <section class="workspace-state">Loading case workspace...</section>
+  } @else if (errorMessage()) {
+    <section class="workspace-state error">{{ errorMessage() }}</section>
+  } @else if (legalCase(); as legalCase) {
+    <section class="workspace-grid">
+      <aside class="workspace-sidebar" aria-label="Case navigation and chat history">
+        <nav class="sidebar-nav" aria-label="Workspace navigation">
+          <button class="active" type="button" (click)="restoreOverview()">
+            <span class="material-symbols-rounded" aria-hidden="true">article</span>
+            <span>Case Overview</span>
+          </button>
+        </nav>
+
+        <div class="chat-history">
+          <section>
+            <h2>Recent Case Chats</h2>
+            <button
+              *ngFor="let chat of conversations()"
+              type="button"
+              [class.active]="activeConversationId() === chat.id"
+              (click)="openConversation(chat.id)"
+            >
+              <span>
+                <strong>{{ chat.title }}</strong>
+                <small>{{ chat.subtitle }}</small>
+              </span>
+              <time>{{ chat.updatedAt }}</time>
+            </button>
+          </section>
+        </div>
+      </aside>
+
+      <section class="overview-panel" aria-labelledby="case-overview-title">
+        <div class="panel-header">
+          <div>
+            <p>Case overview</p>
+            <h1 id="case-overview-title">{{ legalCase.caseNumber }}</h1>
+          </div>
+          <button class="icon-button" type="button" aria-label="Hide case overview" (click)="hideOverview()">
+            <span class="material-symbols-rounded" aria-hidden="true">left_panel_close</span>
+          </button>
+        </div>
+
+        <div class="summary-block">
+          <div>
+            <span class="status-chip" [ngClass]="statusClass(legalCase.status)">
+              {{ legalCase.status }}
+            </span>
+            <span class="risk-chip" [ngClass]="riskClass(legalCase.priorityRiskLevel)">
+              {{ legalCase.priorityRiskLevel }} risk
+            </span>
+          </div>
+          <p>{{ legalCase.shortSummary }}</p>
+          <small>Internal UUID {{ legalCase.id }}</small>
+        </div>
+
+        <div class="tag-row" aria-label="Case tags">
+          <span *ngFor="let tag of legalCase.tags">{{ tag }}</span>
+        </div>
+
+        <dl class="metadata-grid">
+          <div *ngFor="let item of metadata()">
+            <dt>{{ item.label }}</dt>
+            <dd>
+              @if (item.type === 'date') {
+                {{ item.value | date: 'MMM d, y' }}
+              } @else if (item.type === 'currency') {
+                {{ item.value | currency: 'EUR' : 'symbol' : '1.0-0' }}
+              } @else {
+                {{ item.value }}
+              }
+            </dd>
+          </div>
+        </dl>
+
+        <section class="dependency-block">
+          <h2>Current dependency</h2>
+          <p>{{ legalCase.waitingFor }}</p>
+        </section>
+      </section>
+
+      <section class="toto-workspace" aria-labelledby="toto-title">
+        @if (overviewHidden()) {
+          <button class="overview-restore-rail" type="button" (click)="restoreOverview()">
+            <span class="material-symbols-rounded" aria-hidden="true">left_panel_open</span>
+            <span>Show overview</span>
+          </button>
+        }
+
+        <header class="toto-header">
+          <div class="toto-title">
+            <span class="toto-mark" aria-hidden="true">
+              <span class="material-symbols-rounded">smart_toy</span>
+            </span>
+            <div>
+              <h2 id="toto-title">Toto</h2>
+              <span>Case intelligence assistant</span>
+            </div>
+          </div>
+        </header>
+
+        <div class="message-list" aria-live="polite">
+          <article *ngFor="let message of messages()" class="message" [class.user]="message.role === 'user'">
+            <p>{{ message.text }}</p>
+            @if (message.response) {
+              <dl>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{{ message.response.status }}</dd>
+                </div>
+                <div>
+                  <dt>Last correspondence</dt>
+                  <dd>{{ message.response.lastCorrespondence }}</dd>
+                </div>
+                <div>
+                  <dt>Waiting for</dt>
+                  <dd>{{ message.response.waitingFor }}</dd>
+                </div>
+              </dl>
+            }
+          </article>
+
+          @if (totoLoading()) {
+            <article class="message">
+              <p>Toto is reviewing the case record...</p>
+            </article>
+          }
+        </div>
+
+        <form class="chat-input" (submit)="sendTotoMessage($event)">
+          <input
+            type="text"
+            placeholder="Ask about status, deadlines, risks, or next actions"
+            [value]="totoDraft()"
+            (input)="setTotoDraft($any($event.target).value)"
+          />
+          <button type="submit" [disabled]="!totoDraft().trim() || totoLoading()">
+            <span class="material-symbols-rounded" aria-hidden="true">send</span>
+            <span>Send</span>
+          </button>
+        </form>
+      </section>
+    </section>
+  }
+</main>
