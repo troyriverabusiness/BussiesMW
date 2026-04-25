@@ -23,8 +23,8 @@
 
     @if (legalCase(); as legalCase) {
       <div class="topbar-case">
-        <span>{{ legalCase.caseNumber }}</span>
-        <strong>{{ legalCase.caseType }}</strong>
+        <span>{{ caseTitle(legalCase) }}</span>
+        <strong>{{ legalCase.department || 'Legal case' }}</strong>
       </div>
     }
   </header>
@@ -79,7 +79,7 @@
           <div class="panel-header">
             <div>
               <p>Case overview</p>
-              <h1 id="case-overview-title">{{ legalCase.caseNumber }}</h1>
+              <h1 id="case-overview-title">{{ caseTitle(legalCase) }}</h1>
             </div>
             <button class="icon-button" type="button" aria-label="Hide case overview" (click)="hideOverview()">
               <span class="material-symbols-rounded" aria-hidden="true">left_panel_close</span>
@@ -91,16 +91,16 @@
               <span class="status-chip" [ngClass]="statusClass(legalCase.status)">
                 {{ legalCase.status }}
               </span>
-              <span class="risk-chip" [ngClass]="riskClass(legalCase.priorityRiskLevel)">
-                {{ legalCase.priorityRiskLevel }} risk
+              <span class="risk-chip" [ngClass]="riskClass(legalCase.priority)">
+                {{ legalCase.priority }} risk
               </span>
             </div>
-            <p>{{ legalCase.shortSummary }}</p>
+            <p>{{ legalCase.caseSummary || legalCase.legalIssue || partiesSummary(legalCase) }}</p>
             <small>Internal UUID {{ legalCase.id }}</small>
           </div>
 
           <div class="tag-row" aria-label="Case tags">
-            <span *ngFor="let tag of legalCase.tags">{{ tag }}</span>
+            <span *ngFor="let tag of caseTags(legalCase)">{{ tag }}</span>
           </div>
 
           <dl class="metadata-grid">
@@ -119,8 +119,47 @@
           </dl>
 
           <section class="dependency-block">
-            <h2>Current dependency</h2>
-            <p>{{ legalCase.waitingFor }}</p>
+            <h2>Suggested next action</h2>
+            <p>{{ nextActionSummary(legalCase) }}</p>
+          </section>
+
+          @if (legalCase.legalIssue) {
+            <section class="dependency-block">
+              <h2>Legal issue</h2>
+              <p>{{ legalCase.legalIssue }}</p>
+            </section>
+          }
+
+          @if (legalCase.caseFacts?.length) {
+            <section class="dependency-block">
+              <h2>Case facts</h2>
+              <ul>
+                <li *ngFor="let fact of legalCase.caseFacts">{{ fact }}</li>
+              </ul>
+            </section>
+          }
+
+          @if (legalCase.informationGaps?.length) {
+            <section class="dependency-block">
+              <h2>Information gaps</h2>
+              <ul>
+                <li *ngFor="let gap of legalCase.informationGaps">{{ gap }}</li>
+              </ul>
+            </section>
+          }
+
+          @if (legalCase.suggestionActionItems?.length) {
+            <section class="dependency-block">
+              <h2>Action items</h2>
+              <ul>
+                <li *ngFor="let action of legalCase.suggestionActionItems">{{ action }}</li>
+              </ul>
+            </section>
+          }
+
+          <section class="dependency-block">
+            <h2>Parties</h2>
+            <p>{{ partiesSummary(legalCase) }}</p>
           </section>
         </section>
 
@@ -228,25 +267,25 @@
                   <span class="material-symbols-rounded" aria-hidden="true">mail</span>
                   <div>
                     <p>Intake</p>
-                    <h2>{{ traceability.emailSubject }}</h2>
+                    <h2>{{ caseTitle(legalCase) }}</h2>
                   </div>
                 </div>
                 <dl>
                   <div>
-                    <dt>Sender</dt>
-                    <dd>{{ traceability.emailSender }}</dd>
+                    <dt>Source documents</dt>
+                    <dd>{{ legalCase.sourceDocuments || 'Not specified' }}</dd>
                   </div>
                   <div>
-                    <dt>Received</dt>
-                    <dd>{{ traceability.receivedAt | date: 'MMM d, y, HH:mm' }}</dd>
+                    <dt>Last updated</dt>
+                    <dd>{{ legalCase.lastUpdateDate | date: 'MMM d, y, HH:mm' }}</dd>
                   </div>
                   <div>
                     <dt>Case</dt>
-                    <dd>{{ traceability.caseNumber }}</dd>
+                    <dd>{{ legalCase.id }}</dd>
                   </div>
                   <div>
                     <dt>Issue summary</dt>
-                    <dd>{{ traceability.issueSummary }}</dd>
+                    <dd>{{ legalCase.caseSummary || legalCase.legalIssue || 'No issue summary available' }}</dd>
                   </div>
                 </dl>
               </section>
@@ -256,46 +295,49 @@
                   <span class="material-symbols-rounded" aria-hidden="true">smart_toy</span>
                   <div>
                     <p>AI agent run</p>
-                    <h2>{{ traceability.status }}</h2>
+                    <h2>{{ traceability.length }} trace{{ traceability.length === 1 ? '' : 's' }}</h2>
                   </div>
                 </div>
                 <dl>
                   <div>
-                    <dt>Traceability ID</dt>
-                    <dd>{{ traceability.id }}</dd>
-                  </div>
-                  <div>
                     <dt>Case ID</dt>
-                    <dd>{{ traceability.caseId }}</dd>
+                    <dd>{{ legalCase.id }}</dd>
                   </div>
                   <div>
-                    <dt>Started</dt>
-                    <dd>{{ traceability.startedAt | date: 'MMM d, y, HH:mm' }}</dd>
+                    <dt>Priority</dt>
+                    <dd>{{ legalCase.priority }}</dd>
                   </div>
                   <div>
-                    <dt>Completed</dt>
-                    <dd>{{ traceability.completedAt | date: 'MMM d, y, HH:mm' }}</dd>
+                    <dt>Status</dt>
+                    <dd>{{ legalCase.status }}</dd>
+                  </div>
+                  <div>
+                    <dt>Next due</dt>
+                    <dd>{{ legalCase.nextDueDate ? (legalCase.nextDueDate | date: 'MMM d, y') : 'Not set' }}</dd>
                   </div>
                 </dl>
               </section>
             </div>
 
-            <section class="trace-list" aria-label="Workflow traces">
-              <article *ngFor="let trace of traceability.traces" class="trace-card">
+            @if (traceability.length === 0) {
+              <div class="workspace-state compact">No traces have been recorded for this case yet.</div>
+            } @else {
+              <section class="trace-list" aria-label="Workflow traces">
+                <article *ngFor="let trace of traceability" class="trace-card">
                 <button class="trace-card-header" type="button" (click)="toggleTrace(trace.id)">
                   <span class="material-symbols-rounded" aria-hidden="true">
                     {{ isTraceExpanded(trace.id) ? 'expand_less' : 'expand_more' }}
                   </span>
                   <div>
                     <strong>{{ trace.id }}</strong>
-                    <small>{{ trace.createdAt | date: 'MMM d, y, HH:mm' }}</small>
+                    <small>{{ traceTimestamp(trace) | date: 'MMM d, y, HH:mm' }}</small>
                   </div>
-                  <span class="trace-status" [ngClass]="traceStatusClass(trace.status)">{{ trace.status }}</span>
-                  <span>Confidence {{ formatPercent(trace.confidence) }}</span>
-                  <span>{{ trace.humanInLoopRequired ? 'Human review required' : 'No human review' }}</span>
+                  <span class="trace-status" [ngClass]="traceStatusClass(traceStatus(trace))">{{ traceStatus(trace) }}</span>
+                  <span>Confidence {{ formatPercent(traceConfidence(trace)) }}</span>
+                  <span>{{ traceRequiresReview(trace) ? 'Human review recommended' : 'No human review' }}</span>
                 </button>
 
-                @if (trace.humanInLoopRequired) {
+                @if (traceRequiresReview(trace)) {
                   <button class="review-button" type="button" (click)="openReview(trace)">
                     <span class="material-symbols-rounded" aria-hidden="true">rate_review</span>
                     <span>Review</span>
@@ -304,14 +346,14 @@
 
                 @if (isTraceExpanded(trace.id)) {
                   <div class="trace-steps">
-                    <article *ngFor="let step of trace.steps" class="trace-step">
+                    <article *ngFor="let step of trace.traceSteps" class="trace-step">
                       <div class="step-header">
                         <div>
                           <strong>{{ step.step }}</strong>
                           <small>{{ step.createdAt | date: 'MMM d, y, HH:mm' }}</small>
                         </div>
                         <span>Confidence {{ formatPercent(step.confidence) }}</span>
-                        @if (step.humanInLoopRequired) {
+                        @if (stepRequiresReview(step)) {
                           <button type="button" (click)="openReview(trace, step)">Review step</button>
                         }
                       </div>
@@ -333,8 +375,9 @@
                     </article>
                   </div>
                 }
-              </article>
-            </section>
+                </article>
+              </section>
+            }
 
             @if (selectedReviewTrace(); as reviewTrace) {
               <aside class="review-panel" aria-label="Human review panel">
@@ -352,12 +395,12 @@
                   <h3>Summary</h3>
                   <p>
                     The AI processed the intake email, read case metadata, executed tool-assisted legal workflow
-                    checks, and produced a recommendation with {{ formatPercent(reviewTrace.confidence) }} confidence.
+                    checks, and produced a recommendation with {{ formatPercent(traceConfidence(reviewTrace)) }} confidence.
                   </p>
                 </section>
                 <section>
                   <h3>Conclusion</h3>
-                  <p>{{ reviewTrace.status }}. Human judgment is needed before downstream action continues.</p>
+                  <p>{{ traceStatus(reviewTrace) }}. Human judgment is needed before downstream action continues.</p>
                 </section>
                 <section>
                   <h3>Why review is needed</h3>

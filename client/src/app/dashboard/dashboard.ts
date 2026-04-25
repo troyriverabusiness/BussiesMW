@@ -4,9 +4,31 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 
-type LegalCaseStatus = 'Action Required' | 'Pending' | 'Closed';
+type LegalCaseStatus = 'Open' | 'Closed' | 'Action Required' | 'Awaiting Counterparty' | 'Awaiting Internal';
 type CaseFilter = 'All' | LegalCaseStatus;
 type RecentFilter = 'all' | 'recent' | 'nonRecent';
+
+interface ServerLegalCase {
+  id: string;
+  title?: string | null;
+  department?: string | null;
+  status: LegalCaseStatus;
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  nextDueDate?: string | null;
+  internal: boolean;
+  plaintiff?: string | null;
+  defendant?: string | null;
+  courtAuthority?: string | null;
+  jurisdiction?: string | null;
+  claimAmount?: number | null;
+  legalIssue?: string | null;
+  caseFacts?: string[] | null;
+  informationGaps?: string[] | null;
+  suggestionActionItems?: string[] | null;
+  lastUpdateDate: string;
+  sourceDocuments?: string | null;
+  caseSummary?: string | null;
+}
 
 interface LegalCase {
   id: string;
@@ -40,7 +62,7 @@ interface TotoMessage {
 export class DashboardComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
-  private readonly apiUrl = `${this.apiOrigin}/api/v1/legal-cases`;
+  private readonly apiUrl = `${this.apiOrigin}/api/v1/cases`;
   private readonly totoApiUrl = `${this.apiOrigin}/api/v1/toto/chat`;
 
   readonly cases = signal<LegalCase[]>([]);
@@ -61,7 +83,14 @@ export class DashboardComponent implements OnInit {
       text: 'I am Toto. Ask for a case update or use a row action to brief me with the internal case ID.',
     },
   ]);
-  readonly filters: CaseFilter[] = ['All', 'Action Required', 'Pending', 'Closed'];
+  readonly filters: CaseFilter[] = [
+    'Action Required',
+    'All',
+    'Open',
+    'Awaiting Counterparty',
+    'Awaiting Internal',
+    'Closed',
+  ];
   readonly recentFilters: Array<{ label: string; value: RecentFilter }> = [
     { label: 'All cases', value: 'all' },
     { label: 'Recent only', value: 'recent' },
@@ -106,11 +135,11 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     this.http
-      .get<LegalCase[]>(this.apiUrl)
+      .get<ServerLegalCase[]>(this.apiUrl)
       .pipe(finalize(() => this.isLoading.set(false)))
       .subscribe({
         next: (cases) => {
-          this.cases.set(cases);
+          this.cases.set(cases.map((legalCase) => this.toDashboardCase(legalCase)));
         },
         error: () => {
           this.errorMessage.set('Case data is unavailable. Verify that the FastAPI service is running.');
@@ -259,6 +288,36 @@ export class DashboardComponent implements OnInit {
 
   trackCase(_: number, legalCase: LegalCase): string {
     return legalCase.id;
+  }
+
+  private toDashboardCase(legalCase: ServerLegalCase): LegalCase {
+    return {
+      id: legalCase.id,
+      type: legalCase.department || legalCase.title || 'Legal case',
+      issueSummary:
+        legalCase.legalIssue ||
+        legalCase.caseSummary ||
+        legalCase.title ||
+        this.partiesSummary(legalCase) ||
+        'No issue summary available',
+      status: legalCase.status,
+      lastUpdated: legalCase.lastUpdateDate,
+      recent: this.isRecent(legalCase.lastUpdateDate),
+    };
+  }
+
+  private isRecent(value: string): boolean {
+    const timestamp = new Date(value).getTime();
+    if (Number.isNaN(timestamp)) {
+      return false;
+    }
+
+    const sevenDaysInMilliseconds = 7 * 24 * 60 * 60 * 1000;
+    return Date.now() - timestamp <= sevenDaysInMilliseconds;
+  }
+
+  private partiesSummary(legalCase: ServerLegalCase): string {
+    return [legalCase.plaintiff, legalCase.defendant].filter(Boolean).join(' vs ');
   }
 
   private get apiOrigin(): string {

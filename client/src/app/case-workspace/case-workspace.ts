@@ -4,30 +4,30 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
-type LegalCaseStatus = 'Action Required' | 'Pending' | 'Closed';
+type LegalCaseStatus = 'Open' | 'Closed' | 'Action Required' | 'Awaiting Counterparty' | 'Awaiting Internal';
 type PriorityRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
 type WorkspaceSection = 'overview' | 'traceability';
 
 interface LegalCaseDetail {
   id: string;
-  caseNumber: string;
+  title?: string | null;
+  department?: string | null;
   status: LegalCaseStatus;
-  assignedAttorney: string;
-  createdDate: string;
-  lastUpdatedDate: string;
-  tags: string[];
-  shortSummary: string;
-  plaintiffName: string;
-  compensationAmount: number;
-  nextDueDate: string;
-  externalLawFirmInvolved: string;
-  courtInvolved: string;
-  jurisdiction: string;
-  caseType: string;
-  priorityRiskLevel: PriorityRiskLevel;
-  recent: boolean;
-  lastCorrespondence: string;
-  waitingFor: string;
+  priority: PriorityRiskLevel;
+  nextDueDate?: string | null;
+  internal: boolean;
+  plaintiff?: string | null;
+  defendant?: string | null;
+  courtAuthority?: string | null;
+  jurisdiction?: string | null;
+  claimAmount?: number | null;
+  legalIssue?: string | null;
+  caseFacts?: string[] | null;
+  informationGaps?: string[] | null;
+  suggestionActionItems?: string[] | null;
+  lastUpdateDate: string;
+  sourceDocuments?: string | null;
+  caseSummary?: string | null;
 }
 
 interface TotoChatResponse {
@@ -55,12 +55,11 @@ interface TraceStep {
   id: string;
   traceId: string;
   step: string;
-  input: Record<string, unknown>;
-  output: Record<string, unknown>;
+  input: unknown;
+  output: unknown;
   reasoning: string;
   confidence: number;
-  toolCalls: Array<Record<string, unknown>>;
-  humanInLoopRequired: boolean;
+  toolCalls: unknown;
   createdAt: string;
 }
 
@@ -76,26 +75,11 @@ interface HumanReview {
 
 interface Trace {
   id: string;
-  status: string;
-  confidence: number;
-  humanInLoopRequired: boolean;
-  createdAt: string;
-  steps: TraceStep[];
-  reviews: HumanReview[];
-}
-
-interface CaseTraceability {
-  id: string;
-  caseId: string;
-  caseNumber: string;
-  issueSummary: string;
-  emailSubject: string;
-  emailSender: string;
-  receivedAt: string;
-  startedAt: string;
-  completedAt: string;
-  status: string;
-  traces: Trace[];
+  caseId?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  traceSteps: TraceStep[];
+  reviews?: HumanReview[];
 }
 
 @Component({
@@ -108,8 +92,8 @@ export class CaseWorkspaceComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
   private readonly caseId = this.route.snapshot.paramMap.get('id') ?? '';
-  private readonly caseApiUrl = `${this.apiOrigin}/api/v1/legal-cases/${this.caseId}`;
-  private readonly traceabilityApiUrl = `${this.apiOrigin}/api/v1/legal-cases/${this.caseId}/traceability`;
+  private readonly caseApiUrl = `${this.apiOrigin}/api/v1/cases/${this.caseId}`;
+  private readonly traceabilityApiUrl = `${this.apiOrigin}/api/v1/cases/${this.caseId}/traces`;
   private readonly totoApiUrl = `${this.apiOrigin}/api/v1/toto/chat`;
   private readonly reviewsApiUrl = `${this.apiOrigin}/api/v1/reviews`;
 
@@ -123,7 +107,7 @@ export class CaseWorkspaceComponent implements OnInit {
   readonly totoLoading = signal(false);
   readonly conversations = signal<ChatConversation[]>([]);
   readonly activeConversationId = signal('');
-  readonly traceability = signal<CaseTraceability | null>(null);
+  readonly traceability = signal<Trace[] | null>(null);
   readonly traceabilityLoading = signal(false);
   readonly traceabilityError = signal('');
   readonly expandedTraceIds = signal<Set<string>>(new Set());
@@ -144,20 +128,20 @@ export class CaseWorkspaceComponent implements OnInit {
     }
 
     return [
-      { label: 'Case number', value: legalCase.caseNumber },
+      { label: 'Title', value: this.caseTitle(legalCase) },
+      { label: 'Department', value: legalCase.department || 'Unassigned' },
       { label: 'Status', value: legalCase.status },
-      { label: 'Assigned attorney', value: legalCase.assignedAttorney },
-      { label: 'Created date', value: legalCase.createdDate, type: 'date' },
-      { label: 'Last updated date', value: legalCase.lastUpdatedDate, type: 'date' },
-      { label: 'Plaintiff name', value: legalCase.plaintiffName },
-      { label: 'Compensation amount', value: legalCase.compensationAmount, type: 'currency' },
+      { label: 'Priority/risk level', value: legalCase.priority },
+      { label: 'Last updated date', value: legalCase.lastUpdateDate, type: 'date' },
       { label: 'Next due date', value: legalCase.nextDueDate, type: 'date' },
-      { label: 'External law firm involved', value: legalCase.externalLawFirmInvolved },
-      { label: 'Court involved', value: legalCase.courtInvolved },
-      { label: 'Jurisdiction', value: legalCase.jurisdiction },
-      { label: 'Case type', value: legalCase.caseType },
-      { label: 'Priority/risk level', value: legalCase.priorityRiskLevel },
-    ];
+      { label: 'Internal matter', value: legalCase.internal ? 'Yes' : 'No' },
+      { label: 'Plaintiff', value: legalCase.plaintiff || 'Not specified' },
+      { label: 'Defendant', value: legalCase.defendant || 'Not specified' },
+      { label: 'Court authority', value: legalCase.courtAuthority || 'Not specified' },
+      { label: 'Jurisdiction', value: legalCase.jurisdiction || 'Not specified' },
+      { label: 'Claim amount', value: legalCase.claimAmount, type: 'currency' },
+      { label: 'Source documents', value: legalCase.sourceDocuments || 'Not specified' },
+    ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '');
   });
 
   ngOnInit(): void {
@@ -245,7 +229,7 @@ export class CaseWorkspaceComponent implements OnInit {
 
   openReview(trace: Trace, step?: TraceStep): void {
     this.selectedReviewTrace.set(trace);
-    this.selectedReviewStep.set(step ?? trace.steps.find((traceStep) => traceStep.humanInLoopRequired) ?? null);
+    this.selectedReviewStep.set(step ?? trace.traceSteps.find((traceStep) => this.stepRequiresReview(traceStep)) ?? null);
     this.reviewDecision.set('Approve');
     this.reviewComment.set('');
   }
@@ -286,12 +270,9 @@ export class CaseWorkspaceComponent implements OnInit {
             if (!traceability) {
               return traceability;
             }
-            return {
-              ...traceability,
-              traces: traceability.traces.map((item) =>
-                item.id === trace.id ? { ...item, reviews: [...item.reviews, review] } : item,
-              ),
-            };
+            return traceability.map((item) =>
+              item.id === trace.id ? { ...item, reviews: [...(item.reviews ?? []), review] } : item,
+            );
           });
           this.closeReview();
         },
@@ -314,6 +295,52 @@ export class CaseWorkspaceComponent implements OnInit {
     return `${Math.round(value * 100)}%`;
   }
 
+  caseTitle(legalCase: LegalCaseDetail): string {
+    return legalCase.title || legalCase.legalIssue || 'Untitled legal case';
+  }
+
+  caseTags(legalCase: LegalCaseDetail): string[] {
+    return [
+      legalCase.department,
+      legalCase.internal ? 'Internal' : 'External',
+      legalCase.jurisdiction,
+      `${legalCase.priority} priority`,
+    ].filter((tag): tag is string => Boolean(tag));
+  }
+
+  partiesSummary(legalCase: LegalCaseDetail): string {
+    return [legalCase.plaintiff, legalCase.defendant].filter(Boolean).join(' vs ') || 'Parties not specified';
+  }
+
+  nextActionSummary(legalCase: LegalCaseDetail): string {
+    return legalCase.suggestionActionItems?.[0] || legalCase.informationGaps?.[0] || 'No next action recorded';
+  }
+
+  traceStatus(trace: Trace): string {
+    return trace.completedAt ? 'Completed' : 'In progress';
+  }
+
+  traceTimestamp(trace: Trace): string | null {
+    return trace.startedAt || trace.completedAt || null;
+  }
+
+  traceConfidence(trace: Trace): number {
+    if (!trace.traceSteps.length) {
+      return 0;
+    }
+
+    const totalConfidence = trace.traceSteps.reduce((total, step) => total + step.confidence, 0);
+    return totalConfidence / trace.traceSteps.length;
+  }
+
+  traceRequiresReview(trace: Trace): boolean {
+    return trace.traceSteps.some((step) => this.stepRequiresReview(step));
+  }
+
+  stepRequiresReview(step: TraceStep): boolean {
+    return step.confidence < 0.75;
+  }
+
   private loadTraceability(): void {
     if (this.traceability() || this.traceabilityLoading()) {
       return;
@@ -322,12 +349,12 @@ export class CaseWorkspaceComponent implements OnInit {
     this.traceabilityLoading.set(true);
     this.traceabilityError.set('');
     this.http
-      .get<CaseTraceability>(this.traceabilityApiUrl)
+      .get<Trace[]>(this.traceabilityApiUrl)
       .pipe(finalize(() => this.traceabilityLoading.set(false)))
       .subscribe({
         next: (traceability) => {
           this.traceability.set(traceability);
-          this.expandedTraceIds.set(new Set(traceability.traces.slice(0, 1).map((trace) => trace.id)));
+          this.expandedTraceIds.set(new Set(traceability.slice(0, 1).map((trace) => trace.id)));
         },
         error: () => this.traceabilityError.set('Traceability data could not be loaded for this case.'),
       });
@@ -380,6 +407,15 @@ export class CaseWorkspaceComponent implements OnInit {
   }
 
   private buildSeedConversations(legalCase: LegalCaseDetail): ChatConversation[] {
+    const nextDueDate = legalCase.nextDueDate
+      ? new Date(legalCase.nextDueDate).toLocaleDateString()
+      : 'not currently set';
+    const claimAmount = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'EUR',
+      maximumFractionDigits: 0,
+    }).format(legalCase.claimAmount ?? 0);
+
     return [
       {
         id: 'current-case-brief',
@@ -393,7 +429,7 @@ export class CaseWorkspaceComponent implements OnInit {
           },
           {
             role: 'assistant',
-            text: `${legalCase.caseNumber} is ${legalCase.status.toLowerCase()} and assigned to ${legalCase.assignedAttorney}. The next useful checkpoint is ${legalCase.waitingFor}`,
+            text: `${this.caseTitle(legalCase)} is ${legalCase.status.toLowerCase()}. The next useful checkpoint is ${this.nextActionSummary(legalCase)}`,
           },
         ],
       },
@@ -409,7 +445,7 @@ export class CaseWorkspaceComponent implements OnInit {
           },
           {
             role: 'assistant',
-            text: `${legalCase.lastCorrespondence} The response should stay narrow, confirm receipt, and avoid committing to a settlement position until ${legalCase.assignedAttorney} has reviewed the record set.`,
+            text: `${legalCase.caseSummary || legalCase.legalIssue || 'No case summary is currently available.'} The response should stay narrow and avoid committing to a position until the record set has been reviewed.`,
           },
         ],
       },
@@ -425,7 +461,7 @@ export class CaseWorkspaceComponent implements OnInit {
           },
           {
             role: 'assistant',
-            text: `The next due date is ${new Date(legalCase.nextDueDate).toLocaleDateString()} and the priority level is ${legalCase.priorityRiskLevel}. The compensation amount currently tracked is ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(legalCase.compensationAmount)}.`,
+            text: `The next due date is ${nextDueDate} and the priority level is ${legalCase.priority}. The claim amount currently tracked is ${claimAmount}.`,
           },
         ],
       },
