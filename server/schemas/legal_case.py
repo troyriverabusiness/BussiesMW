@@ -12,5 +12,6 @@ class LegalCaseResponse(BaseModel):
     issue_summary: str = Field(alias="issueSummary")
     status: LegalCaseStatus
     last_updated: datetime = Field(alias="lastUpdated")
+    recent: bool
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)

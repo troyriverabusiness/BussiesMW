@@ -9,7 +9,7 @@
     </a>
 
     <label class="search-shell">
-      <span aria-hidden="true">⌕</span>
+      <span class="material-symbols-rounded" aria-hidden="true">search</span>
       <input
         type="search"
         placeholder="Search status, internal ID, type, or issue summary"
@@ -32,26 +32,54 @@
         <span>{{ filteredCases().length }} matching records</span>
       </div>
 
-      <div class="controls">
-        <div class="filter-group" aria-label="Filter cases by status">
-          <button
-            *ngFor="let filter of filters"
-            type="button"
-            [class.active]="activeFilter() === filter"
-            (click)="setFilter(filter)"
-          >
-            <span>{{ filter }}</span>
-            <strong>{{ filterCount(filter) }}</strong>
-          </button>
+      <div class="toolbar-actions">
+        <button
+          class="filter-toggle"
+          type="button"
+          [attr.aria-expanded]="filtersOpen()"
+          aria-controls="case-filters"
+          (click)="toggleFilters()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">tune</span>
+          <span>{{ filtersOpen() ? 'Hide filters' : 'Show filters' }}</span>
+          <span class="material-symbols-rounded chevron" aria-hidden="true">
+            {{ filtersOpen() ? 'expand_less' : 'expand_more' }}
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <div id="case-filters" class="filter-panel" [class.open]="filtersOpen()">
+      <div class="filter-content" aria-label="Case filters">
+        <div>
+          <span class="filter-label">Status</span>
+          <div class="filter-group" aria-label="Filter cases by status">
+            <button
+              *ngFor="let filter of filters"
+              type="button"
+              [class.active]="activeFilter() === filter"
+              (click)="setFilter(filter)"
+            >
+              <span>{{ filter }}</span>
+              <strong>{{ filterCount(filter) }}</strong>
+            </button>
+          </div>
         </div>
 
-        <label class="sort-control">
-          <span>Sort</span>
-          <select [value]="sortMode()" (change)="setSortMode($any($event.target).value)">
-            <option value="recent">Recently updated first</option>
-            <option value="oldest">Oldest updated first</option>
-          </select>
-        </label>
+        <div>
+          <span class="filter-label">Visibility</span>
+          <div class="filter-group" aria-label="Filter cases by recent state">
+            <button
+              *ngFor="let filter of recentFilters"
+              type="button"
+              [class.active]="activeRecentFilter() === filter.value"
+              (click)="setRecentFilter(filter.value)"
+            >
+              <span>{{ filter.label }}</span>
+              <strong>{{ recentFilterCount(filter.value) }}</strong>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -76,6 +104,7 @@
               *ngFor="let legalCase of paginatedCases(); let rowIndex = index; trackBy: trackCase"
               tabindex="0"
               role="button"
+              [class.recent-row]="legalCase.recent"
               (click)="openCase(legalCase)"
               (keydown.enter)="openCase(legalCase)"
               (keydown.space)="openCase(legalCase)"
@@ -85,7 +114,12 @@
                 <span class="case-type">{{ legalCase.type }}</span>
               </td>
               <td>
-                <span class="summary">{{ legalCase.issueSummary }}</span>
+                <span class="summary">
+                  {{ legalCase.issueSummary }}
+                  @if (legalCase.recent) {
+                    <span class="recent-badge">New</span>
+                  }
+                </span>
               </td>
               <td>
                 <span class="status-chip" [ngClass]="statusClass(legalCase.status)">

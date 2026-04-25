@@ -6,7 +6,7 @@ from uuid import uuid4
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import DateTime, Uuid
+from sqlalchemy.types import Boolean, DateTime, Uuid
 
 from database import Base
 
@@ -34,3 +34,4 @@ class LegalCase(Base):
         index=True,
     )
     last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
