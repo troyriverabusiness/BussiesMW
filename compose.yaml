@@ -10,5 +10,30 @@ services:
   server:
     build:
       context: ./server
+    environment:
+      DATABASE_URL: postgresql+psycopg://bussiesmw:bussiesmw@db:5432/bussiesmw
+      ALLOWED_ORIGINS: http://localhost:4200,http://127.0.0.1:4200
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: bussiesmw
+      POSTGRES_USER: bussiesmw
+      POSTGRES_PASSWORD: bussiesmw
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bussiesmw -d bussiesmw"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:

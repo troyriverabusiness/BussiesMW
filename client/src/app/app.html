@@ -1,64 +1,118 @@
-<main class="app-shell">
+<main class="dashboard-shell">
   <header class="topbar" aria-label="Primary">
-    <a class="brand" href="/" aria-label="Orchestrator home">
-      <span class="brand-mark" aria-hidden="true">O</span>
-      <span>Orchestrator</span>
+    <a class="brand" href="/" aria-label="Bussies legal dashboard home">
+      <span class="brand-mark" aria-hidden="true">B</span>
+      <span>
+        <strong>Bussies</strong>
+        <small>Multi-agent legal orchestration</small>
+      </span>
     </a>
 
-    <nav class="nav-links" aria-label="Product navigation">
-      <a href="/">Platform</a>
-      <a href="/">Compliance</a>
-      <a href="/">Security</a>
-      <a href="/">Contact</a>
-    </nav>
+    <label class="search-shell">
+      <span aria-hidden="true">⌕</span>
+      <input
+        type="search"
+        placeholder="Search status, internal ID, type, or issue summary"
+        [value]="searchQuery()"
+        (input)="setSearchQuery($any($event.target).value)"
+      />
+    </label>
   </header>
 
-  <section class="hero" aria-labelledby="hero-title">
-    <div class="hero-content">
-      <p class="eyebrow">Legal workflow intelligence</p>
-      <h1 id="hero-title">Welcome to the Orchestrator</h1>
-      <p class="hero-copy">
-        Coordinate matter intake, compliance review, and operational governance from a
-        focused command center built for legal and enterprise teams.
-      </p>
+  <section class="page-heading" aria-labelledby="dashboard-title">
+    <p class="eyebrow">Legal operations workspace</p>
+    <h1 id="dashboard-title">Hello, Alex</h1>
+    <p>Accelerate 2x more cases in 3x less time with up to 4x operational cost savings.</p>
+  </section>
 
-      <div class="hero-actions" aria-label="Primary actions">
-        <a class="button button-primary" href="/">Request access</a>
-        <a class="button button-secondary" href="/">View platform</a>
+  <section class="case-workspace" aria-labelledby="case-table-title">
+    <div class="table-toolbar">
+      <div>
+        <h2 id="case-table-title">Case workflows</h2>
+        <span>{{ filteredCases().length }} matching records</span>
+      </div>
+
+      <div class="controls">
+        <div class="filter-group" aria-label="Filter cases by status">
+          <button
+            *ngFor="let filter of filters"
+            type="button"
+            [class.active]="activeFilter() === filter"
+            (click)="setFilter(filter)"
+          >
+            <span>{{ filter }}</span>
+            <strong>{{ filterCount(filter) }}</strong>
+          </button>
+        </div>
+
+        <label class="sort-control">
+          <span>Sort</span>
+          <select [value]="sortMode()" (change)="setSortMode($any($event.target).value)">
+            <option value="recent">Recently updated first</option>
+            <option value="oldest">Oldest updated first</option>
+          </select>
+        </label>
       </div>
     </div>
 
-    <aside class="status-panel" aria-label="Platform status summary">
-      <div class="panel-header">
-        <span>Review Docket</span>
-        <strong>Q2 Governance</strong>
+    @if (isLoading()) {
+      <div class="state-message">Loading legal case registry...</div>
+    } @else if (errorMessage()) {
+      <div class="state-message error">{{ errorMessage() }}</div>
+    } @else {
+      <div class="table-frame">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col" class="serial-column">No.</th>
+              <th scope="col">Type</th>
+              <th scope="col">Issue summary</th>
+              <th scope="col">Status</th>
+              <th scope="col">Last updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let legalCase of paginatedCases(); let rowIndex = index; trackBy: trackCase"
+              tabindex="0"
+              role="button"
+              (click)="openCase(legalCase)"
+              (keydown.enter)="openCase(legalCase)"
+              (keydown.space)="openCase(legalCase)"
+            >
+              <td class="serial-column">{{ pageIndex() * pageSize + rowIndex + 1 }}</td>
+              <td>
+                <span class="case-type">{{ legalCase.type }}</span>
+              </td>
+              <td>
+                <span class="summary">{{ legalCase.issueSummary }}</span>
+              </td>
+              <td>
+                <span class="status-chip" [ngClass]="statusClass(legalCase.status)">
+                  {{ legalCase.status }}
+                </span>
+              </td>
+              <td class="updated-column">{{ legalCase.lastUpdated | date: 'MMM d, y, HH:mm' }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <div class="metric-grid">
+      <div class="pagination" aria-label="Case pagination">
+        <span>Page {{ pageIndex() + 1 }} of {{ totalPages() }}</span>
         <div>
-          <span class="metric-label">Controls</span>
-          <strong>184</strong>
-        </div>
-        <div>
-          <span class="metric-label">Risk flags</span>
-          <strong>12</strong>
+          <button type="button" [disabled]="pageIndex() === 0" (click)="previousPage()">Previous</button>
+          <button
+            type="button"
+            [disabled]="pageIndex() >= totalPages() - 1"
+            (click)="nextPage()"
+          >
+            Next
+          </button>
         </div>
       </div>
-
-      <ol class="review-list" aria-label="Review queue">
-        <li>
-          <span>Contract policy review</span>
-          <strong>Ready</strong>
-        </li>
-        <li>
-          <span>Regulatory evidence pack</span>
-          <strong>In review</strong>
-        </li>
-        <li>
-          <span>Entity approval workflow</span>
-          <strong>Queued</strong>
-        </li>
-      </ol>
-    </aside>
+    }
   </section>
+
+  <footer class="footer">Copyright © 2026 Bussies</footer>
 </main>
