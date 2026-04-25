@@ -34,9 +34,9 @@ class LegalCaseResponse(BaseModel):
     jurisdiction: str | None = None
     claim_amount: float | None = Field(default=None, alias="claimAmount")
     legal_issue: str | None = Field(default=None, alias="legalIssue")
-    case_facts: str | None = Field(default=None, alias="caseFacts")
-    information_gaps: str | None = Field(default=None, alias="informationGaps")
-    suggestion_action_items: str | None = Field(default=None, alias="suggestionActionItems")
+    case_facts: list[str] | None = Field(default=None, alias="caseFacts")
+    information_gaps: list[str] | None = Field(default=None, alias="informationGaps")
+    suggestion_action_items: list[str] | None = Field(default=None, alias="suggestionActionItems")
     last_update_date: datetime = Field(alias="lastUpdateDate")
     source_documents: str | None = Field(default=None, alias="sourceDocuments")
     case_summary: str | None = Field(default=None, alias="caseSummary")

@@ -2,6 +2,18 @@ from data_access.legal_case_repository import LegalCaseRepository
 from schemas.toto import TotoChatRequest, TotoChatResponse
 
 
+def _format_case_text(value: object, fallback: str) -> str:
+    if isinstance(value, list):
+        formatted_items = [str(item).strip() for item in value if str(item).strip()]
+        if formatted_items:
+            return "; ".join(formatted_items)
+
+    if value:
+        return str(value)
+
+    return fallback
+
+
 class TotoService:
     def __init__(self, repository: LegalCaseRepository) -> None:
         self._repository = repository
@@ -21,11 +33,14 @@ class TotoService:
             title = str(legal_case.get("title") or "Selected case")
             priority = str(legal_case.get("priority") or "unknown")
             next_due_date = legal_case.get("next_due_date") or "not scheduled"
-            action_items = str(
-                legal_case.get("suggestion_action_items")
-                or "Review the Supabase case record and confirm the next action."
+            action_items = _format_case_text(
+                legal_case.get("suggestion_action_items"),
+                "Review the Supabase case record and confirm the next action.",
             )
-            case_summary = str(legal_case.get("case_summary") or legal_case.get("case_facts") or title)
+            case_summary = _format_case_text(
+                legal_case.get("case_summary") or legal_case.get("case_facts"),
+                title,
+            )
 
             return TotoChatResponse(
                 status=status,

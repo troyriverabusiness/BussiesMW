@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes.legal_cases import router as legal_cases_router
 from routes.status import router as status_router
 from routes.toto import router as toto_router
+from routes.traces import router as traces_router
 
 
 def create_application() -> FastAPI:
@@ -34,3 +35,4 @@ app = create_application()
 app.include_router(status_router, prefix="/api/v1", tags=["status"])
 app.include_router(legal_cases_router, prefix="/api/v1", tags=["legal cases"])
 app.include_router(toto_router, prefix="/api/v1", tags=["toto"])
+app.include_router(traces_router, prefix="/api/v1", tags=["traces"])
