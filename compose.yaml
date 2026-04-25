@@ -1,4 +1,28 @@
 services:
-  client: 
+  client:
+    image: node:24-alpine
+    working_dir: /app
+    volumes:
+      - ./client:/app
+      - client_node_modules:/app/node_modules
+    ports:
+      - "4200:4200"
+    command: sh -c "npm ci && npm start -- --host 0.0.0.0"
+    depends_on:
+      - server
 
   server:
+    image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+    working_dir: /app
+    volumes:
+      - ./server:/app
+      - server_venv:/app/.venv
+      - uv_cache:/root/.cache/uv
+    ports:
+      - "8000:8000"
+    command: sh -c "uv sync --locked && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+
+volumes:
+  client_node_modules:
+  server_venv:
+  uv_cache:
