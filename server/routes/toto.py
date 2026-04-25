@@ -13,7 +13,7 @@ def get_toto_service() -> TotoService:
     repository = LegalCaseRepository()
     return TotoService(repository=repository)
 
-
+# TODO: Implement correctly
 @router.post("/toto/chat", response_model=TotoChatResponse)
 def chat_with_toto(
     payload: TotoChatRequest,

@@ -21,7 +21,6 @@ def _service_unavailable_error(exc: Exception) -> HTTPException:
 
 
 @router.get("/cases", response_model=list[LegalCaseResponse])
-@router.get("/legal-cases", response_model=list[LegalCaseResponse], include_in_schema=False)
 def read_legal_cases(
     service: LegalCaseService = Depends(get_legal_case_service),
 ) -> list[LegalCaseResponse]:
@@ -32,7 +31,6 @@ def read_legal_cases(
 
 
 @router.get("/cases/{case_id}", response_model=LegalCaseDetailResponse)
-@router.get("/legal-cases/{case_id}", response_model=LegalCaseDetailResponse, include_in_schema=False)
 def read_legal_case(
     case_id: UUID,
     service: LegalCaseService = Depends(get_legal_case_service),

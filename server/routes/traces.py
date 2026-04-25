@@ -24,7 +24,6 @@ def _service_unavailable_error(exc: Exception) -> HTTPException:
 
 
 @router.get("/cases/{case_id}/traces", response_model=list[TraceResponse])
-@router.get("/legal-cases/{case_id}/traces", response_model=list[TraceResponse], include_in_schema=False)
 def read_case_traces(
     case_id: UUID,
     service: TraceService = Depends(get_trace_service),
