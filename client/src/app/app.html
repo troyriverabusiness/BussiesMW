@@ -34,6 +34,18 @@
 
       <div class="toolbar-actions">
         <button
+          class="toto-toggle"
+          type="button"
+          title="Quick update chatbot for any case"
+          [attr.aria-expanded]="totoOpen()"
+          aria-controls="toto-panel"
+          (click)="toggleToto()"
+        >
+          <span class="material-symbols-rounded" aria-hidden="true">forum</span>
+          <span>Toto</span>
+        </button>
+
+        <button
           class="filter-toggle"
           type="button"
           [attr.aria-expanded]="filtersOpen()"
@@ -97,6 +109,7 @@
               <th scope="col">Issue summary</th>
               <th scope="col">Status</th>
               <th scope="col">Last updated</th>
+              <th scope="col" class="action-column">Toto</th>
             </tr>
           </thead>
           <tbody>
@@ -127,6 +140,17 @@
                 </span>
               </td>
               <td class="updated-column">{{ legalCase.lastUpdated | date: 'MMM d, y, HH:mm' }}</td>
+              <td class="action-column">
+                <button
+                  class="row-toto-button"
+                  type="button"
+                  title="Update with Toto"
+                  aria-label="Update with Toto"
+                  (click)="requestCaseUpdate(legalCase, $event)"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">chat</span>
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -150,3 +174,78 @@
 
   <footer class="footer">Copyright © 2026 Bussies</footer>
 </main>
+
+@if (totoOpen()) {
+  <aside id="toto-panel" class="toto-panel" aria-label="Toto quick case-update chatbot">
+    <div class="toto-header">
+      <div>
+        <span class="assistant-mark" aria-hidden="true">T</span>
+        <div>
+          <strong>Toto</strong>
+          <span>Quick case-update assistant</span>
+        </div>
+      </div>
+      <div class="toto-window-actions">
+        <button type="button" class="sound-toggle" (click)="toggleTotoMute()">
+          <span class="material-symbols-rounded" aria-hidden="true">
+            {{ totoMuted() ? 'volume_off' : 'volume_up' }}
+          </span>
+          <span>{{ totoMuted() ? 'Muted' : 'Sound on' }}</span>
+        </button>
+        <button type="button" class="close-toto" aria-label="Close Toto" (click)="toggleToto()">
+          <span class="material-symbols-rounded" aria-hidden="true">close</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="toto-messages" aria-live="polite">
+      <article
+        *ngFor="let message of totoMessages()"
+        class="toto-message"
+        [class.user]="message.role === 'user'"
+      >
+        <p>{{ message.text }}</p>
+        @if (message.caseId) {
+          <div class="case-reference">
+            <span>Internal case ID</span>
+            <code>{{ message.caseId }}</code>
+          </div>
+        }
+        @if (message.response) {
+          <dl>
+            <div>
+              <dt>Status</dt>
+              <dd>{{ message.response.status }}</dd>
+            </div>
+            <div>
+              <dt>Last correspondence</dt>
+              <dd>{{ message.response.lastCorrespondence }}</dd>
+            </div>
+            <div>
+              <dt>Waiting for</dt>
+              <dd>{{ message.response.waitingFor }}</dd>
+            </div>
+          </dl>
+        }
+      </article>
+      @if (totoLoading()) {
+        <article class="toto-message">
+          <p>Toto is checking the orchestration record...</p>
+        </article>
+      }
+    </div>
+
+    <form class="toto-input" (submit)="sendTotoDraft($event)">
+      <input
+        type="text"
+        placeholder="Ask Toto for a case update"
+        [value]="totoDraft()"
+        (input)="setTotoDraft($any($event.target).value)"
+      />
+      <button type="submit" [disabled]="!totoDraft().trim() || totoLoading()">
+        <span class="material-symbols-rounded" aria-hidden="true">send</span>
+        <span>Send</span>
+      </button>
+    </form>
+  </aside>
+}
