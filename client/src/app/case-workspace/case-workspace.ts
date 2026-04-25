@@ -6,6 +6,7 @@ import { finalize } from 'rxjs';
 
 type LegalCaseStatus = 'Action Required' | 'Pending' | 'Closed';
 type PriorityRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+type WorkspaceSection = 'overview' | 'traceability';
 
 interface LegalCaseDetail {
   id: string;
@@ -50,6 +51,53 @@ interface ChatConversation {
   messages: ChatMessage[];
 }
 
+interface TraceStep {
+  id: string;
+  traceId: string;
+  step: string;
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+  reasoning: string;
+  confidence: number;
+  toolCalls: Array<Record<string, unknown>>;
+  humanInLoopRequired: boolean;
+  createdAt: string;
+}
+
+interface HumanReview {
+  id: string;
+  traceId: string;
+  traceStepId?: string | null;
+  reviewerName: string;
+  decision: string;
+  comment: string;
+  reviewedAt: string;
+}
+
+interface Trace {
+  id: string;
+  status: string;
+  confidence: number;
+  humanInLoopRequired: boolean;
+  createdAt: string;
+  steps: TraceStep[];
+  reviews: HumanReview[];
+}
+
+interface CaseTraceability {
+  id: string;
+  caseId: string;
+  caseNumber: string;
+  issueSummary: string;
+  emailSubject: string;
+  emailSender: string;
+  receivedAt: string;
+  startedAt: string;
+  completedAt: string;
+  status: string;
+  traces: Trace[];
+}
+
 @Component({
   selector: 'app-case-workspace',
   imports: [CommonModule, CurrencyPipe, DatePipe, RouterLink],
@@ -61,17 +109,29 @@ export class CaseWorkspaceComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly caseId = this.route.snapshot.paramMap.get('id') ?? '';
   private readonly caseApiUrl = `${this.apiOrigin}/api/v1/legal-cases/${this.caseId}`;
+  private readonly traceabilityApiUrl = `${this.apiOrigin}/api/v1/legal-cases/${this.caseId}/traceability`;
   private readonly totoApiUrl = `${this.apiOrigin}/api/v1/toto/chat`;
+  private readonly reviewsApiUrl = `${this.apiOrigin}/api/v1/reviews`;
 
   readonly legalCase = signal<LegalCaseDetail | null>(null);
   readonly isLoading = signal(true);
   readonly errorMessage = signal('');
+  readonly activeSection = signal<WorkspaceSection>('overview');
   readonly sidebarCollapsed = signal(false);
   readonly overviewHidden = signal(false);
   readonly totoDraft = signal('');
   readonly totoLoading = signal(false);
   readonly conversations = signal<ChatConversation[]>([]);
   readonly activeConversationId = signal('');
+  readonly traceability = signal<CaseTraceability | null>(null);
+  readonly traceabilityLoading = signal(false);
+  readonly traceabilityError = signal('');
+  readonly expandedTraceIds = signal<Set<string>>(new Set());
+  readonly selectedReviewTrace = signal<Trace | null>(null);
+  readonly selectedReviewStep = signal<TraceStep | null>(null);
+  readonly reviewDecision = signal('Approve');
+  readonly reviewComment = signal('');
+  readonly reviewSaving = signal(false);
   readonly messages = computed(() => {
     const activeId = this.activeConversationId();
     return this.conversations().find((conversation) => conversation.id === activeId)?.messages ?? [];
@@ -117,6 +177,13 @@ export class CaseWorkspaceComponent implements OnInit {
     this.sidebarCollapsed.update((isCollapsed) => !isCollapsed);
   }
 
+  setSection(section: WorkspaceSection): void {
+    this.activeSection.set(section);
+    if (section === 'traceability') {
+      this.loadTraceability();
+    }
+  }
+
   hideOverview(): void {
     this.overviewHidden.set(true);
   }
@@ -160,12 +227,110 @@ export class CaseWorkspaceComponent implements OnInit {
     this.activeConversationId.set(conversationId);
   }
 
+  toggleTrace(traceId: string): void {
+    this.expandedTraceIds.update((traceIds) => {
+      const nextTraceIds = new Set(traceIds);
+      if (nextTraceIds.has(traceId)) {
+        nextTraceIds.delete(traceId);
+      } else {
+        nextTraceIds.add(traceId);
+      }
+      return nextTraceIds;
+    });
+  }
+
+  isTraceExpanded(traceId: string): boolean {
+    return this.expandedTraceIds().has(traceId);
+  }
+
+  openReview(trace: Trace, step?: TraceStep): void {
+    this.selectedReviewTrace.set(trace);
+    this.selectedReviewStep.set(step ?? trace.steps.find((traceStep) => traceStep.humanInLoopRequired) ?? null);
+    this.reviewDecision.set('Approve');
+    this.reviewComment.set('');
+  }
+
+  closeReview(): void {
+    this.selectedReviewTrace.set(null);
+    this.selectedReviewStep.set(null);
+  }
+
+  setReviewDecision(decision: string): void {
+    this.reviewDecision.set(decision);
+  }
+
+  setReviewComment(comment: string): void {
+    this.reviewComment.set(comment);
+  }
+
+  submitReview(event: Event): void {
+    event.preventDefault();
+    const trace = this.selectedReviewTrace();
+    if (!trace || this.reviewSaving()) {
+      return;
+    }
+
+    this.reviewSaving.set(true);
+    this.http
+      .post<HumanReview>(this.reviewsApiUrl, {
+        traceId: trace.id,
+        traceStepId: this.selectedReviewStep()?.id ?? null,
+        reviewerName: 'Legal reviewer',
+        decision: this.reviewDecision(),
+        comment: this.reviewComment().trim() || 'Reviewed in the traceability workspace.',
+      })
+      .pipe(finalize(() => this.reviewSaving.set(false)))
+      .subscribe({
+        next: (review) => {
+          this.traceability.update((traceability) => {
+            if (!traceability) {
+              return traceability;
+            }
+            return {
+              ...traceability,
+              traces: traceability.traces.map((item) =>
+                item.id === trace.id ? { ...item, reviews: [...item.reviews, review] } : item,
+              ),
+            };
+          });
+          this.closeReview();
+        },
+      });
+  }
+
   riskClass(riskLevel: PriorityRiskLevel): string {
     return riskLevel.toLowerCase();
   }
 
   statusClass(status: LegalCaseStatus): string {
     return status.toLowerCase().replace(/\s+/g, '-');
+  }
+
+  traceStatusClass(status: string): string {
+    return status.toLowerCase().replace(/\s+/g, '-');
+  }
+
+  formatPercent(value: number): string {
+    return `${Math.round(value * 100)}%`;
+  }
+
+  private loadTraceability(): void {
+    if (this.traceability() || this.traceabilityLoading()) {
+      return;
+    }
+
+    this.traceabilityLoading.set(true);
+    this.traceabilityError.set('');
+    this.http
+      .get<CaseTraceability>(this.traceabilityApiUrl)
+      .pipe(finalize(() => this.traceabilityLoading.set(false)))
+      .subscribe({
+        next: (traceability) => {
+          this.traceability.set(traceability);
+          this.expandedTraceIds.set(new Set(traceability.traces.slice(0, 1).map((trace) => trace.id)));
+        },
+        error: () => this.traceabilityError.set('Traceability data could not be loaded for this case.'),
+      });
   }
 
   private appendMessage(message: ChatMessage): void {

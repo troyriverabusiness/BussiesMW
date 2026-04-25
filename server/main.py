@@ -9,6 +9,7 @@ from database import SessionLocal, create_database_schema
 from routes.legal_cases import router as legal_cases_router
 from routes.status import router as status_router
 from routes.toto import router as toto_router
+from routes.traceability import router as traceability_router
 from seed import seed_legal_cases
 
 
@@ -47,3 +48,4 @@ app = create_application()
 app.include_router(status_router, prefix="/api/v1", tags=["status"])
 app.include_router(legal_cases_router, prefix="/api/v1", tags=["legal cases"])
 app.include_router(toto_router, prefix="/api/v1", tags=["toto"])
+app.include_router(traceability_router, prefix="/api/v1", tags=["traceability"])

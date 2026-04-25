@@ -34,12 +34,24 @@
   } @else if (errorMessage()) {
     <section class="workspace-state error">{{ errorMessage() }}</section>
   } @else if (legalCase(); as legalCase) {
-    <section class="workspace-grid">
+    <section class="workspace-grid" [class.trace-mode]="activeSection() === 'traceability'">
       <aside class="workspace-sidebar" aria-label="Case navigation and chat history">
         <nav class="sidebar-nav" aria-label="Workspace navigation">
-          <button class="active" type="button" (click)="restoreOverview()">
+          <button
+            type="button"
+            [class.active]="activeSection() === 'overview'"
+            (click)="setSection('overview'); restoreOverview()"
+          >
             <span class="material-symbols-rounded" aria-hidden="true">article</span>
             <span>Case Overview</span>
+          </button>
+          <button
+            type="button"
+            [class.active]="activeSection() === 'traceability'"
+            (click)="setSection('traceability')"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">account_tree</span>
+            <span>Traceability</span>
           </button>
         </nav>
 
@@ -62,116 +74,335 @@
         </div>
       </aside>
 
-      <section class="overview-panel" aria-labelledby="case-overview-title">
-        <div class="panel-header">
-          <div>
-            <p>Case overview</p>
-            <h1 id="case-overview-title">{{ legalCase.caseNumber }}</h1>
-          </div>
-          <button class="icon-button" type="button" aria-label="Hide case overview" (click)="hideOverview()">
-            <span class="material-symbols-rounded" aria-hidden="true">left_panel_close</span>
-          </button>
-        </div>
-
-        <div class="summary-block">
-          <div>
-            <span class="status-chip" [ngClass]="statusClass(legalCase.status)">
-              {{ legalCase.status }}
-            </span>
-            <span class="risk-chip" [ngClass]="riskClass(legalCase.priorityRiskLevel)">
-              {{ legalCase.priorityRiskLevel }} risk
-            </span>
-          </div>
-          <p>{{ legalCase.shortSummary }}</p>
-          <small>Internal UUID {{ legalCase.id }}</small>
-        </div>
-
-        <div class="tag-row" aria-label="Case tags">
-          <span *ngFor="let tag of legalCase.tags">{{ tag }}</span>
-        </div>
-
-        <dl class="metadata-grid">
-          <div *ngFor="let item of metadata()">
-            <dt>{{ item.label }}</dt>
-            <dd>
-              @if (item.type === 'date') {
-                {{ item.value | date: 'MMM d, y' }}
-              } @else if (item.type === 'currency') {
-                {{ item.value | currency: 'EUR' : 'symbol' : '1.0-0' }}
-              } @else {
-                {{ item.value }}
-              }
-            </dd>
-          </div>
-        </dl>
-
-        <section class="dependency-block">
-          <h2>Current dependency</h2>
-          <p>{{ legalCase.waitingFor }}</p>
-        </section>
-      </section>
-
-      <section class="toto-workspace" aria-labelledby="toto-title">
-        @if (overviewHidden()) {
-          <button class="overview-restore-rail" type="button" (click)="restoreOverview()">
-            <span class="material-symbols-rounded" aria-hidden="true">left_panel_open</span>
-            <span>Show overview</span>
-          </button>
-        }
-
-        <header class="toto-header">
-          <div class="toto-title">
-            <span class="toto-mark" aria-hidden="true">
-              <span class="material-symbols-rounded">smart_toy</span>
-            </span>
+      @if (activeSection() === 'overview') {
+        <section class="overview-panel" aria-labelledby="case-overview-title">
+          <div class="panel-header">
             <div>
-              <h2 id="toto-title">Toto</h2>
-              <span>Case intelligence assistant</span>
+              <p>Case overview</p>
+              <h1 id="case-overview-title">{{ legalCase.caseNumber }}</h1>
             </div>
+            <button class="icon-button" type="button" aria-label="Hide case overview" (click)="hideOverview()">
+              <span class="material-symbols-rounded" aria-hidden="true">left_panel_close</span>
+            </button>
           </div>
-        </header>
 
-        <div class="message-list" aria-live="polite">
-          <article *ngFor="let message of messages()" class="message" [class.user]="message.role === 'user'">
-            <p>{{ message.text }}</p>
-            @if (message.response) {
-              <dl>
-                <div>
-                  <dt>Status</dt>
-                  <dd>{{ message.response.status }}</dd>
-                </div>
-                <div>
-                  <dt>Last correspondence</dt>
-                  <dd>{{ message.response.lastCorrespondence }}</dd>
-                </div>
-                <div>
-                  <dt>Waiting for</dt>
-                  <dd>{{ message.response.waitingFor }}</dd>
-                </div>
-              </dl>
-            }
-          </article>
+          <div class="summary-block">
+            <div>
+              <span class="status-chip" [ngClass]="statusClass(legalCase.status)">
+                {{ legalCase.status }}
+              </span>
+              <span class="risk-chip" [ngClass]="riskClass(legalCase.priorityRiskLevel)">
+                {{ legalCase.priorityRiskLevel }} risk
+              </span>
+            </div>
+            <p>{{ legalCase.shortSummary }}</p>
+            <small>Internal UUID {{ legalCase.id }}</small>
+          </div>
 
-          @if (totoLoading()) {
-            <article class="message">
-              <p>Toto is reviewing the case record...</p>
-            </article>
+          <div class="tag-row" aria-label="Case tags">
+            <span *ngFor="let tag of legalCase.tags">{{ tag }}</span>
+          </div>
+
+          <dl class="metadata-grid">
+            <div *ngFor="let item of metadata()">
+              <dt>{{ item.label }}</dt>
+              <dd>
+                @if (item.type === 'date') {
+                  {{ item.value | date: 'MMM d, y' }}
+                } @else if (item.type === 'currency') {
+                  {{ item.value | currency: 'EUR' : 'symbol' : '1.0-0' }}
+                } @else {
+                  {{ item.value }}
+                }
+              </dd>
+            </div>
+          </dl>
+
+          <section class="dependency-block">
+            <h2>Current dependency</h2>
+            <p>{{ legalCase.waitingFor }}</p>
+          </section>
+        </section>
+
+        <section class="toto-workspace" aria-labelledby="toto-title">
+          @if (overviewHidden()) {
+            <button class="overview-restore-rail" type="button" (click)="restoreOverview()">
+              <span class="material-symbols-rounded" aria-hidden="true">left_panel_open</span>
+              <span>Show overview</span>
+            </button>
           }
-        </div>
 
-        <form class="chat-input" (submit)="sendTotoMessage($event)">
-          <input
-            type="text"
-            placeholder="Ask about status, deadlines, risks, or next actions"
-            [value]="totoDraft()"
-            (input)="setTotoDraft($any($event.target).value)"
-          />
-          <button type="submit" [disabled]="!totoDraft().trim() || totoLoading()">
-            <span class="material-symbols-rounded" aria-hidden="true">send</span>
-            <span>Send</span>
-          </button>
-        </form>
-      </section>
+          <header class="toto-header">
+            <div class="toto-title">
+              <span class="toto-mark" aria-hidden="true">
+                <span class="material-symbols-rounded">smart_toy</span>
+              </span>
+              <div>
+                <h2 id="toto-title">Toto</h2>
+                <span>Case intelligence assistant</span>
+              </div>
+            </div>
+          </header>
+
+          <div class="message-list" aria-live="polite">
+            <article *ngFor="let message of messages()" class="message" [class.user]="message.role === 'user'">
+              <p>{{ message.text }}</p>
+              @if (message.response) {
+                <dl>
+                  <div>
+                    <dt>Status</dt>
+                    <dd>{{ message.response.status }}</dd>
+                  </div>
+                  <div>
+                    <dt>Last correspondence</dt>
+                    <dd>{{ message.response.lastCorrespondence }}</dd>
+                  </div>
+                  <div>
+                    <dt>Waiting for</dt>
+                    <dd>{{ message.response.waitingFor }}</dd>
+                  </div>
+                </dl>
+              }
+            </article>
+
+            @if (totoLoading()) {
+              <article class="message">
+                <p>Toto is reviewing the case record...</p>
+              </article>
+            }
+          </div>
+
+          <form class="chat-input" (submit)="sendTotoMessage($event)">
+            <input
+              type="text"
+              placeholder="Ask about status, deadlines, risks, or next actions"
+              [value]="totoDraft()"
+              (input)="setTotoDraft($any($event.target).value)"
+            />
+            <button type="submit" [disabled]="!totoDraft().trim() || totoLoading()">
+              <span class="material-symbols-rounded" aria-hidden="true">send</span>
+              <span>Send</span>
+            </button>
+          </form>
+        </section>
+      } @else {
+        <section class="traceability-workspace" aria-labelledby="traceability-title">
+          <header class="traceability-header">
+            <div>
+              <p>AI Trace Visualization & Human Review Workspace</p>
+              <h1 id="traceability-title">Traceability</h1>
+            </div>
+            <span>n8n multi-agent workflow</span>
+          </header>
+
+          @if (traceabilityLoading()) {
+            <div class="workspace-state compact">Loading traceability data...</div>
+          } @else if (traceabilityError()) {
+            <div class="workspace-state compact error">{{ traceabilityError() }}</div>
+          } @else if (traceability(); as traceability) {
+            <div class="trace-flow" aria-label="Traceability workflow">
+              <div>
+                <span class="flow-icon material-symbols-rounded" aria-hidden="true">mail</span>
+                <strong>Email intake</strong>
+              </div>
+              <span class="flow-arrow material-symbols-rounded" aria-hidden="true">arrow_forward</span>
+              <div>
+                <span class="flow-icon material-symbols-rounded" aria-hidden="true">smart_toy</span>
+                <strong>AI agent</strong>
+              </div>
+              <span class="flow-arrow material-symbols-rounded" aria-hidden="true">arrow_forward</span>
+              <div>
+                <span class="flow-icon material-symbols-rounded" aria-hidden="true">timeline</span>
+                <strong>Trace cards</strong>
+              </div>
+              <span class="flow-arrow material-symbols-rounded" aria-hidden="true">arrow_forward</span>
+              <div>
+                <span class="flow-icon material-symbols-rounded" aria-hidden="true">verified_user</span>
+                <strong>Human review</strong>
+              </div>
+            </div>
+
+            <div class="traceability-grid">
+              <section class="intake-panel">
+                <div class="section-heading">
+                  <span class="material-symbols-rounded" aria-hidden="true">mail</span>
+                  <div>
+                    <p>Intake</p>
+                    <h2>{{ traceability.emailSubject }}</h2>
+                  </div>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Sender</dt>
+                    <dd>{{ traceability.emailSender }}</dd>
+                  </div>
+                  <div>
+                    <dt>Received</dt>
+                    <dd>{{ traceability.receivedAt | date: 'MMM d, y, HH:mm' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Case</dt>
+                    <dd>{{ traceability.caseNumber }}</dd>
+                  </div>
+                  <div>
+                    <dt>Issue summary</dt>
+                    <dd>{{ traceability.issueSummary }}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section class="agent-panel">
+                <div class="section-heading">
+                  <span class="material-symbols-rounded" aria-hidden="true">smart_toy</span>
+                  <div>
+                    <p>AI agent run</p>
+                    <h2>{{ traceability.status }}</h2>
+                  </div>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Traceability ID</dt>
+                    <dd>{{ traceability.id }}</dd>
+                  </div>
+                  <div>
+                    <dt>Case ID</dt>
+                    <dd>{{ traceability.caseId }}</dd>
+                  </div>
+                  <div>
+                    <dt>Started</dt>
+                    <dd>{{ traceability.startedAt | date: 'MMM d, y, HH:mm' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Completed</dt>
+                    <dd>{{ traceability.completedAt | date: 'MMM d, y, HH:mm' }}</dd>
+                  </div>
+                </dl>
+              </section>
+            </div>
+
+            <section class="trace-list" aria-label="Workflow traces">
+              <article *ngFor="let trace of traceability.traces" class="trace-card">
+                <button class="trace-card-header" type="button" (click)="toggleTrace(trace.id)">
+                  <span class="material-symbols-rounded" aria-hidden="true">
+                    {{ isTraceExpanded(trace.id) ? 'expand_less' : 'expand_more' }}
+                  </span>
+                  <div>
+                    <strong>{{ trace.id }}</strong>
+                    <small>{{ trace.createdAt | date: 'MMM d, y, HH:mm' }}</small>
+                  </div>
+                  <span class="trace-status" [ngClass]="traceStatusClass(trace.status)">{{ trace.status }}</span>
+                  <span>Confidence {{ formatPercent(trace.confidence) }}</span>
+                  <span>{{ trace.humanInLoopRequired ? 'Human review required' : 'No human review' }}</span>
+                </button>
+
+                @if (trace.humanInLoopRequired) {
+                  <button class="review-button" type="button" (click)="openReview(trace)">
+                    <span class="material-symbols-rounded" aria-hidden="true">rate_review</span>
+                    <span>Review</span>
+                  </button>
+                }
+
+                @if (isTraceExpanded(trace.id)) {
+                  <div class="trace-steps">
+                    <article *ngFor="let step of trace.steps" class="trace-step">
+                      <div class="step-header">
+                        <div>
+                          <strong>{{ step.step }}</strong>
+                          <small>{{ step.createdAt | date: 'MMM d, y, HH:mm' }}</small>
+                        </div>
+                        <span>Confidence {{ formatPercent(step.confidence) }}</span>
+                        @if (step.humanInLoopRequired) {
+                          <button type="button" (click)="openReview(trace, step)">Review step</button>
+                        }
+                      </div>
+                      <p>{{ step.reasoning }}</p>
+                      <div class="json-grid">
+                        <div>
+                          <h3>Input</h3>
+                          <pre>{{ step.input | json }}</pre>
+                        </div>
+                        <div>
+                          <h3>Output</h3>
+                          <pre>{{ step.output | json }}</pre>
+                        </div>
+                        <div>
+                          <h3>Tool calls</h3>
+                          <pre>{{ step.toolCalls | json }}</pre>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                }
+              </article>
+            </section>
+
+            @if (selectedReviewTrace(); as reviewTrace) {
+              <aside class="review-panel" aria-label="Human review panel">
+                <div class="review-header">
+                  <div>
+                    <p>Human review</p>
+                    <h2>{{ selectedReviewStep()?.step || 'Trace review' }}</h2>
+                  </div>
+                  <button class="icon-button" type="button" aria-label="Close review" (click)="closeReview()">
+                    <span class="material-symbols-rounded" aria-hidden="true">close</span>
+                  </button>
+                </div>
+
+                <section>
+                  <h3>Summary</h3>
+                  <p>
+                    The AI processed the intake email, read case metadata, executed tool-assisted legal workflow
+                    checks, and produced a recommendation with {{ formatPercent(reviewTrace.confidence) }} confidence.
+                  </p>
+                </section>
+                <section>
+                  <h3>Conclusion</h3>
+                  <p>{{ reviewTrace.status }}. Human judgment is needed before downstream action continues.</p>
+                </section>
+                <section>
+                  <h3>Why review is needed</h3>
+                  <p>
+                    The trace or one of its steps crossed the human-in-loop threshold for risk, authority, or
+                    response posture.
+                  </p>
+                </section>
+                @if (selectedReviewStep(); as reviewStep) {
+                  <section>
+                    <h3>Important details</h3>
+                    <p>{{ reviewStep.reasoning }}</p>
+                    <pre>{{ reviewStep.output | json }}</pre>
+                    <pre>{{ reviewStep.toolCalls | json }}</pre>
+                  </section>
+                }
+
+                <form class="review-form" (submit)="submitReview($event)">
+                  <label>
+                    <span>Decision</span>
+                    <select [value]="reviewDecision()" (change)="setReviewDecision($any($event.target).value)">
+                      <option>Approve</option>
+                      <option>Request changes</option>
+                      <option>Escalate</option>
+                      <option>Reject</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Comment</span>
+                    <textarea
+                      rows="4"
+                      placeholder="Add legal review notes"
+                      [value]="reviewComment()"
+                      (input)="setReviewComment($any($event.target).value)"
+                    ></textarea>
+                  </label>
+                  <button type="submit" [disabled]="reviewSaving()">
+                    {{ reviewSaving() ? 'Saving...' : 'Save decision' }}
+                  </button>
+                </form>
+              </aside>
+            }
+          }
+        </section>
+      }
     </section>
   }
 </main>
