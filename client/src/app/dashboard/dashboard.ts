@@ -107,8 +107,8 @@ export class DashboardComponent implements OnInit {
   readonly totoDraft = signal('');
   readonly totoMessages = signal<TotoMessage[]>([]);
   readonly filters: CaseFilter[] = [
-    'Action Required',
     'All',
+    'Action Required',
     'Open',
     'Awaiting Counterparty',
     'Awaiting Internal',
@@ -660,12 +660,37 @@ export class DashboardComponent implements OnInit {
     return this.cases().filter((legalCase) => legalCase.status === filter).length;
   }
 
+  filterAriaLabel(filter: CaseFilter): string {
+    const count = this.filterCount(filter);
+    const caseLabel = count === 1 ? 'case' : 'cases';
+    return filter === 'All' ? `Show all cases, ${count} ${caseLabel}` : `Show ${filter} cases, ${count} ${caseLabel}`;
+  }
+
+  isEmptyFilter(filter: CaseFilter): boolean {
+    return this.filterCount(filter) === 0;
+  }
+
   recentFilterCount(filter: RecentFilter): number {
     if (filter === 'all') {
       return this.cases().length;
     }
 
     return this.cases().filter((legalCase) => (filter === 'recent' ? legalCase.recent : !legalCase.recent)).length;
+  }
+
+  recentFilterAriaLabel(filter: RecentFilter): string {
+    const labels: Record<RecentFilter, string> = {
+      all: 'all cases',
+      recent: 'recent cases',
+      nonRecent: 'non-recent cases',
+    };
+    const count = this.recentFilterCount(filter);
+    const caseLabel = count === 1 ? 'case' : 'cases';
+    return `Show ${labels[filter]}, ${count} ${caseLabel}`;
+  }
+
+  isEmptyRecentFilter(filter: RecentFilter): boolean {
+    return this.recentFilterCount(filter) === 0;
   }
 
   statusClass(status: LegalCaseStatus): string {

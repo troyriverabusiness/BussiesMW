@@ -70,6 +70,8 @@
               *ngFor="let filter of recentFilters"
               type="button"
               [class.active]="activeRecentFilter() === filter.value"
+              [class.empty]="isEmptyRecentFilter(filter.value)"
+              [attr.aria-label]="recentFilterAriaLabel(filter.value)"
               (click)="setRecentFilter(filter.value)"
             >
               <span>{{ filter.label }}</span>
@@ -86,6 +88,8 @@
           *ngFor="let filter of filters"
           type="button"
           [class.active]="activeFilter() === filter"
+          [class.empty]="isEmptyFilter(filter)"
+          [attr.aria-label]="filterAriaLabel(filter)"
           (click)="setFilter(filter)"
         >
           <span>{{ filter }}</span>
@@ -104,14 +108,19 @@
           <thead>
             <tr>
               <th scope="col" class="serial-column">No.</th>
-              <th scope="col">Type</th>
-              <th scope="col">Issue summary</th>
-              <th scope="col">Status</th>
-              <th scope="col">Last updated</th>
+              <th scope="col" class="type-column">Type</th>
+              <th scope="col" class="summary-column">Issue summary</th>
+              <th scope="col" class="status-column">Status</th>
+              <th scope="col" class="updated-column">Last updated</th>
               <th scope="col" class="action-column">Toto</th>
             </tr>
           </thead>
           <tbody>
+            @if (!paginatedCases().length) {
+              <tr class="empty-results-row">
+                <td colspan="6">No cases match the selected filters.</td>
+              </tr>
+            }
             <tr
               *ngFor="let legalCase of paginatedCases(); let rowIndex = index; trackBy: trackCase"
               tabindex="0"
@@ -122,18 +131,18 @@
               (keydown.space)="openCase(legalCase)"
             >
               <td class="serial-column">{{ pageIndex() * pageSize + rowIndex + 1 }}</td>
-              <td>
+              <td class="type-column">
                 <span class="case-type">{{ legalCase.type }}</span>
               </td>
-              <td>
-                <span class="summary">
-                  {{ legalCase.issueSummary }}
+              <td class="summary-column">
+                <span class="summary" [title]="legalCase.issueSummary">
+                  <span class="summary-text">{{ legalCase.issueSummary }}</span>
                   @if (legalCase.recent) {
                     <span class="recent-badge">New</span>
                   }
                 </span>
               </td>
-              <td>
+              <td class="status-column">
                 <span class="status-chip" [ngClass]="statusClass(legalCase.status)">
                   {{ legalCase.status }}
                 </span>
