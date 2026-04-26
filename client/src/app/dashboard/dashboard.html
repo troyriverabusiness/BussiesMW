@@ -198,6 +198,11 @@
     </div>
 
     <div class="toto-messages" aria-live="polite">
+      @if (!totoMessages().length && !totoLoading()) {
+        <article class="toto-message">
+          <p>Ask Toto a question or choose a case row to start a live AI chat.</p>
+        </article>
+      }
       <article
         *ngFor="let message of totoMessages()"
         class="toto-message"
@@ -209,22 +214,6 @@
             <span>Internal case ID</span>
             <code>{{ message.caseId }}</code>
           </div>
-        }
-        @if (message.response) {
-          <dl>
-            <div>
-              <dt>Status</dt>
-              <dd>{{ message.response.status }}</dd>
-            </div>
-            <div>
-              <dt>Last correspondence</dt>
-              <dd>{{ message.response.lastCorrespondence }}</dd>
-            </div>
-            <div>
-              <dt>Waiting for</dt>
-              <dd>{{ message.response.waitingFor }}</dd>
-            </div>
-          </dl>
         }
       </article>
       @if (totoLoading()) {

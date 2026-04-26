@@ -35,7 +35,7 @@
     <section class="workspace-state error">{{ errorMessage() }}</section>
   } @else if (legalCase(); as legalCase) {
     <section class="workspace-grid" [class.trace-mode]="activeSection() === 'traceability'">
-      <aside class="workspace-sidebar" aria-label="Case navigation and chat history">
+      <aside class="workspace-sidebar" aria-label="Case navigation">
         <nav class="sidebar-nav" aria-label="Workspace navigation">
           <button
             type="button"
@@ -55,23 +55,6 @@
           </button>
         </nav>
 
-        <div class="chat-history">
-          <section>
-            <h2>Recent Case Chats</h2>
-            <button
-              *ngFor="let chat of conversations()"
-              type="button"
-              [class.active]="activeConversationId() === chat.id"
-              (click)="openConversation(chat.id)"
-            >
-              <span>
-                <strong>{{ chat.title }}</strong>
-                <small>{{ chat.subtitle }}</small>
-              </span>
-              <time>{{ chat.updatedAt }}</time>
-            </button>
-          </section>
-        </div>
       </aside>
 
       @if (activeSection() === 'overview') {
@@ -184,41 +167,30 @@
           </header>
 
           <div class="message-list" aria-live="polite">
+            @if (!messages().length && !chatLoading()) {
+              <article class="message">
+                <p>Ask Toto about this case to start a live AI chat.</p>
+              </article>
+            }
             <article *ngFor="let message of messages()" class="message" [class.user]="message.role === 'user'">
               <p>{{ message.text }}</p>
-              @if (message.response) {
-                <dl>
-                  <div>
-                    <dt>Status</dt>
-                    <dd>{{ message.response.status }}</dd>
-                  </div>
-                  <div>
-                    <dt>Last correspondence</dt>
-                    <dd>{{ message.response.lastCorrespondence }}</dd>
-                  </div>
-                  <div>
-                    <dt>Waiting for</dt>
-                    <dd>{{ message.response.waitingFor }}</dd>
-                  </div>
-                </dl>
-              }
             </article>
 
-            @if (totoLoading()) {
+            @if (chatLoading()) {
               <article class="message">
                 <p>Toto is reviewing the case record...</p>
               </article>
             }
           </div>
 
-          <form class="chat-input" (submit)="sendTotoMessage($event)">
+          <form class="chat-input" (submit)="sendChatMessage($event)">
             <input
               type="text"
               placeholder="Ask about status, deadlines, risks, or next actions"
-              [value]="totoDraft()"
-              (input)="setTotoDraft($any($event.target).value)"
+              [value]="chatDraft()"
+              (input)="setChatDraft($any($event.target).value)"
             />
-            <button type="submit" [disabled]="!totoDraft().trim() || totoLoading()">
+            <button type="submit" [disabled]="!chatDraft().trim() || chatLoading()">
               <span class="material-symbols-rounded" aria-hidden="true">send</span>
               <span>Send</span>
             </button>

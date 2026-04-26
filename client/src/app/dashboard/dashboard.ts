@@ -39,18 +39,27 @@ interface LegalCase {
   recent: boolean;
 }
 
-interface TotoChatResponse {
-  status: string;
-  lastCorrespondence: string;
-  waitingFor: string;
-  summary: string;
-}
-
 interface TotoMessage {
   role: 'user' | 'assistant';
   text: string;
   caseId?: string;
-  response?: TotoChatResponse;
+}
+
+interface ChatHistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface ChatStreamEvent {
+  content?: string;
+  tool_call?: {
+    name: string;
+    args: Record<string, unknown>;
+  };
+  tool_result?: {
+    name: string;
+  };
+  error?: string;
 }
 
 @Component({
@@ -63,7 +72,7 @@ export class DashboardComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly apiUrl = `${this.apiOrigin}/api/v1/cases`;
-  private readonly totoApiUrl = `${this.apiOrigin}/api/v1/toto/chat`;
+  private readonly chatApiUrl = `${this.apiOrigin}/api/v1/chat`;
 
   readonly cases = signal<LegalCase[]>([]);
   readonly activeFilter = signal<CaseFilter>('Action Required');
@@ -77,12 +86,7 @@ export class DashboardComponent implements OnInit {
   readonly totoLoading = signal(false);
   readonly totoMuted = signal(false);
   readonly totoDraft = signal('');
-  readonly totoMessages = signal<TotoMessage[]>([
-    {
-      role: 'assistant',
-      text: 'I am Toto. Ask for a case update or use a row action to brief me with the internal case ID.',
-    },
-  ]);
+  readonly totoMessages = signal<TotoMessage[]>([]);
   readonly filters: CaseFilter[] = [
     'Action Required',
     'All',
@@ -208,36 +212,114 @@ export class DashboardComponent implements OnInit {
     void this.router.navigate(['/cases', legalCase.id]);
   }
 
-  private sendTotoRequest(request: string, caseId?: string): void {
+  private async sendTotoRequest(request: string, caseId?: string): Promise<void> {
     this.totoLoading.set(true);
+    const history = this.toChatHistory();
     this.totoMessages.update((messages) => [...messages, { role: 'user', text: request, caseId }]);
+    this.totoMessages.update((messages) => [...messages, { role: 'assistant', text: '' }]);
     this.playTone(440, 0.025);
 
-    this.http
-      .post<TotoChatResponse>(this.totoApiUrl, { request, caseId })
-      .pipe(finalize(() => this.totoLoading.set(false)))
-      .subscribe({
-        next: (response) => {
-          this.totoMessages.update((messages) => [
-            ...messages,
-            {
-              role: 'assistant',
-              text: response.summary,
-              response,
-            },
-          ]);
-          this.playTone(660, 0.04);
-        },
-        error: () => {
-          this.totoMessages.update((messages) => [
-            ...messages,
-            {
-              role: 'assistant',
-              text: 'Toto could not reach the case-update service. Please try again.',
-            },
-          ]);
-        },
-      });
+    try {
+      await this.streamChatResponse({ message: request, caseId, messages: history });
+      this.ensureAssistantMessageText('Toto did not return a response.');
+      this.playTone(660, 0.04);
+    } catch {
+      this.replaceLastAssistantMessage('Toto could not reach the AI chat service. Please try again.');
+    } finally {
+      this.totoLoading.set(false);
+    }
+  }
+
+  private async streamChatResponse(payload: {
+    message: string;
+    caseId?: string;
+    messages: ChatHistoryMessage[];
+  }): Promise<void> {
+    const response = await fetch(this.chatApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok || !response.body) {
+      throw new Error('Chat stream failed.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+      let separatorIndex = buffer.indexOf('\n\n');
+      while (separatorIndex !== -1) {
+        const rawEvent = buffer.slice(0, separatorIndex).trim();
+        buffer = buffer.slice(separatorIndex + 2);
+        this.handleChatStreamEvent(rawEvent);
+        separatorIndex = buffer.indexOf('\n\n');
+      }
+
+      if (done) {
+        break;
+      }
+    }
+  }
+
+  private handleChatStreamEvent(rawEvent: string): void {
+    const dataLine = rawEvent
+      .split('\n')
+      .find((line) => line.startsWith('data:'));
+    const rawData = dataLine?.replace(/^data:\s*/, '');
+    if (!rawData || rawData === '[DONE]') {
+      return;
+    }
+
+    const event = JSON.parse(rawData) as ChatStreamEvent;
+    if (event.error) {
+      throw new Error(event.error);
+    }
+    if (event.content) {
+      this.appendToLastAssistantMessage(event.content);
+    }
+  }
+
+  private appendToLastAssistantMessage(content: string): void {
+    this.totoMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          text: `${lastMessage.text}${content}`,
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private replaceLastAssistantMessage(text: string): void {
+    this.totoMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = { ...lastMessage, text };
+      }
+      return nextMessages;
+    });
+  }
+
+  private ensureAssistantMessageText(fallback: string): void {
+    const lastMessage = this.totoMessages().at(-1);
+    if (lastMessage?.role === 'assistant' && !lastMessage.text.trim()) {
+      this.replaceLastAssistantMessage(fallback);
+    }
+  }
+
+  private toChatHistory(): ChatHistoryMessage[] {
+    return this.totoMessages()
+      .filter((message) => message.text.trim())
+      .map((message) => ({ role: message.role, content: message.text }));
   }
 
   private playTone(frequency: number, duration: number): void {

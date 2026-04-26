@@ -30,25 +30,26 @@ interface LegalCaseDetail {
   caseSummary?: string | null;
 }
 
-interface TotoChatResponse {
-  status: string;
-  lastCorrespondence: string;
-  waitingFor: string;
-  summary: string;
-}
-
 interface ChatMessage {
   role: 'assistant' | 'user';
   text: string;
-  response?: TotoChatResponse;
 }
 
-interface ChatConversation {
-  id: string;
-  title: string;
-  subtitle: string;
-  updatedAt: string;
-  messages: ChatMessage[];
+interface ChatHistoryMessage {
+  role: 'assistant' | 'user';
+  content: string;
+}
+
+interface ChatStreamEvent {
+  content?: string;
+  tool_call?: {
+    name: string;
+    args: Record<string, unknown>;
+  };
+  tool_result?: {
+    name: string;
+  };
+  error?: string;
 }
 
 interface TraceStep {
@@ -94,7 +95,7 @@ export class CaseWorkspaceComponent implements OnInit {
   private readonly caseId = this.route.snapshot.paramMap.get('id') ?? '';
   private readonly caseApiUrl = `${this.apiOrigin}/api/v1/cases/${this.caseId}`;
   private readonly traceabilityApiUrl = `${this.apiOrigin}/api/v1/cases/${this.caseId}/traces`;
-  private readonly totoApiUrl = `${this.apiOrigin}/api/v1/toto/chat`;
+  private readonly chatApiUrl = `${this.apiOrigin}/api/v1/chat`;
   private readonly reviewsApiUrl = `${this.apiOrigin}/api/v1/reviews`;
 
   readonly legalCase = signal<LegalCaseDetail | null>(null);
@@ -103,10 +104,9 @@ export class CaseWorkspaceComponent implements OnInit {
   readonly activeSection = signal<WorkspaceSection>('overview');
   readonly sidebarCollapsed = signal(false);
   readonly overviewHidden = signal(false);
-  readonly totoDraft = signal('');
-  readonly totoLoading = signal(false);
-  readonly conversations = signal<ChatConversation[]>([]);
-  readonly activeConversationId = signal('');
+  readonly chatDraft = signal('');
+  readonly chatLoading = signal(false);
+  readonly messages = signal<ChatMessage[]>([]);
   readonly traceability = signal<Trace[] | null>(null);
   readonly traceabilityLoading = signal(false);
   readonly traceabilityError = signal('');
@@ -116,11 +116,6 @@ export class CaseWorkspaceComponent implements OnInit {
   readonly reviewDecision = signal('Approve');
   readonly reviewComment = signal('');
   readonly reviewSaving = signal(false);
-  readonly messages = computed(() => {
-    const activeId = this.activeConversationId();
-    return this.conversations().find((conversation) => conversation.id === activeId)?.messages ?? [];
-  });
-
   readonly metadata = computed(() => {
     const legalCase = this.legalCase();
     if (!legalCase) {
@@ -151,7 +146,6 @@ export class CaseWorkspaceComponent implements OnInit {
       .subscribe({
         next: (legalCase) => {
           this.legalCase.set(legalCase);
-          this.loadConversations(legalCase);
         },
         error: () => this.errorMessage.set('This case could not be loaded. Return to the dashboard and try again.'),
       });
@@ -176,39 +170,35 @@ export class CaseWorkspaceComponent implements OnInit {
     this.overviewHidden.set(false);
   }
 
-  setTotoDraft(message: string): void {
-    this.totoDraft.set(message);
+  setChatDraft(message: string): void {
+    this.chatDraft.set(message);
   }
 
-  sendTotoMessage(event: Event): void {
+  async sendChatMessage(event: Event): Promise<void> {
     event.preventDefault();
-    const message = this.totoDraft().trim();
-    if (!message || this.totoLoading()) {
+    const message = this.chatDraft().trim();
+    if (!message || this.chatLoading()) {
       return;
     }
 
-    this.totoDraft.set('');
-    this.totoLoading.set(true);
+    const history = this.toChatHistory();
+    this.chatDraft.set('');
+    this.chatLoading.set(true);
     this.appendMessage({ role: 'user', text: message });
+    this.appendMessage({ role: 'assistant', text: '' });
 
-    this.http
-      .post<TotoChatResponse>(this.totoApiUrl, { message, caseId: this.caseId })
-      .pipe(finalize(() => this.totoLoading.set(false)))
-      .subscribe({
-        next: (response) => {
-          this.appendMessage({ role: 'assistant', text: response.summary, response });
-        },
-        error: () => {
-          this.appendMessage({
-            role: 'assistant',
-            text: 'Toto could not reach the case service. Please try again.',
-          });
-        },
+    try {
+      await this.streamChatResponse({
+        message,
+        caseId: this.caseId,
+        messages: history,
       });
-  }
-
-  openConversation(conversationId: string): void {
-    this.activeConversationId.set(conversationId);
+      this.ensureAssistantMessageText('Toto did not return a response.');
+    } catch (error) {
+      this.replaceLastAssistantMessage(this.chatFailureMessage(error));
+    } finally {
+      this.chatLoading.set(false);
+    }
   }
 
   toggleTrace(traceId: string): void {
@@ -361,115 +351,103 @@ export class CaseWorkspaceComponent implements OnInit {
   }
 
   private appendMessage(message: ChatMessage): void {
-    const activeId = this.activeConversationId();
-    this.conversations.update((conversations) =>
-      conversations.map((conversation) =>
-        conversation.id === activeId
-          ? {
-              ...conversation,
-              subtitle: message.text,
-              updatedAt: 'Just now',
-              messages: [...conversation.messages, message],
-            }
-          : conversation,
-      ),
-    );
-    this.persistConversations();
+    this.messages.update((messages) => [...messages, message]);
   }
 
-  private loadConversations(legalCase: LegalCaseDetail): void {
-    const savedConversations = this.readSavedConversations();
-    const conversations = savedConversations.length
-      ? savedConversations
-      : this.buildSeedConversations(legalCase);
-
-    this.conversations.set(conversations);
-    this.activeConversationId.set(conversations[0]?.id ?? '');
-    this.persistConversations();
-  }
-
-  private readSavedConversations(): ChatConversation[] {
-    const rawConversations = window.localStorage.getItem(this.storageKey);
-    if (!rawConversations) {
-      return [];
+  private async streamChatResponse(payload: {
+    message: string;
+    caseId: string;
+    messages: ChatHistoryMessage[];
+  }): Promise<void> {
+    const response = await fetch(this.chatApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok || !response.body) {
+      throw new Error('Chat stream failed.');
     }
 
-    try {
-      const conversations = JSON.parse(rawConversations) as ChatConversation[];
-      return Array.isArray(conversations) ? conversations : [];
-    } catch {
-      return [];
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+      let separatorIndex = buffer.indexOf('\n\n');
+      while (separatorIndex !== -1) {
+        const rawEvent = buffer.slice(0, separatorIndex).trim();
+        buffer = buffer.slice(separatorIndex + 2);
+        this.handleChatStreamEvent(rawEvent);
+        separatorIndex = buffer.indexOf('\n\n');
+      }
+
+      if (done) {
+        break;
+      }
     }
   }
 
-  private persistConversations(): void {
-    window.localStorage.setItem(this.storageKey, JSON.stringify(this.conversations()));
+  private handleChatStreamEvent(rawEvent: string): void {
+    const dataLine = rawEvent
+      .split('\n')
+      .find((line) => line.startsWith('data:'));
+    const rawData = dataLine?.replace(/^data:\s*/, '');
+    if (!rawData || rawData === '[DONE]') {
+      return;
+    }
+
+    const streamEvent = JSON.parse(rawData) as ChatStreamEvent;
+    if (streamEvent.error) {
+      throw new Error(streamEvent.error);
+    }
+    if (streamEvent.content) {
+      this.appendToLastAssistantMessage(streamEvent.content);
+    }
   }
 
-  private buildSeedConversations(legalCase: LegalCaseDetail): ChatConversation[] {
-    const nextDueDate = legalCase.nextDueDate
-      ? new Date(legalCase.nextDueDate).toLocaleDateString()
-      : 'not currently set';
-    const claimAmount = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'EUR',
-      maximumFractionDigits: 0,
-    }).format(legalCase.claimAmount ?? 0);
-
-    return [
-      {
-        id: 'current-case-brief',
-        title: 'Current case brief',
-        subtitle: 'Status, owner, and immediate blocker',
-        updatedAt: 'Today',
-        messages: [
-          {
-            role: 'assistant',
-            text: 'Hi, I’m Toto. Ask me anything about this case — status, correspondence, deadlines, risks, or next actions.',
-          },
-          {
-            role: 'assistant',
-            text: `${this.caseTitle(legalCase)} is ${legalCase.status.toLowerCase()}. The next useful checkpoint is ${this.nextActionSummary(legalCase)}`,
-          },
-        ],
-      },
-      {
-        id: 'correspondence-review',
-        title: 'Correspondence review',
-        subtitle: 'Latest inbound note and response posture',
-        updatedAt: 'Yesterday',
-        messages: [
-          {
-            role: 'user',
-            text: 'Summarize the latest correspondence and what we still need before responding.',
-          },
-          {
-            role: 'assistant',
-            text: `${legalCase.caseSummary || legalCase.legalIssue || 'No case summary is currently available.'} The response should stay narrow and avoid committing to a position until the record set has been reviewed.`,
-          },
-        ],
-      },
-      {
-        id: 'deadline-risk-check',
-        title: 'Deadline and risk check',
-        subtitle: 'Due date, exposure, and priority level',
-        updatedAt: 'Apr 24',
-        messages: [
-          {
-            role: 'user',
-            text: 'What is the timing risk on this matter?',
-          },
-          {
-            role: 'assistant',
-            text: `The next due date is ${nextDueDate} and the priority level is ${legalCase.priority}. The claim amount currently tracked is ${claimAmount}.`,
-          },
-        ],
-      },
-    ];
+  private appendToLastAssistantMessage(content: string): void {
+    this.updateLastAssistantMessage((message) => `${message}${content}`);
   }
 
-  private get storageKey(): string {
-    return `bussiesmw:toto-conversations:${this.caseId}`;
+  private replaceLastAssistantMessage(text: string): void {
+    this.updateLastAssistantMessage(() => text);
+  }
+
+  private ensureAssistantMessageText(fallback: string): void {
+    const lastMessage = this.messages().at(-1);
+    if (lastMessage?.role === 'assistant' && !lastMessage.text.trim()) {
+      this.replaceLastAssistantMessage(fallback);
+    }
+  }
+
+  private chatFailureMessage(error: unknown): string {
+    const detail = error instanceof Error ? error.message.trim() : '';
+    return detail
+      ? `Toto could not reach the AI chat service. Server error: ${detail}`
+      : 'Toto could not reach the AI chat service. Please try again.';
+  }
+
+  private updateLastAssistantMessage(updateText: (currentText: string) => string): void {
+    this.messages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          text: updateText(lastMessage.text),
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private toChatHistory(): ChatHistoryMessage[] {
+    return this.messages()
+      .filter((message) => message.text.trim())
+      .map((message) => ({ role: message.role, content: message.text }));
   }
 
   private get apiOrigin(): string {
