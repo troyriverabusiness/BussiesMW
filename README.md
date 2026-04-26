@@ -47,7 +47,9 @@ Setup:
 ```bash
 TELEGRAM_BOT_TOKEN=your_bot_token
 TELEGRAM_INTERNAL_CHAT_ID=your_internal_chat_id
+TELEGRAM_EXTERNAL_CHAT_ID=your_external_chat_id
 ```
 
-The recipient is fixed by environment configuration; the agent only supplies the
-message text.
+Recipients are fixed by environment configuration; the agent only supplies the
+message text. External contact messages require user approval in the chat UI
+before Telegram is called.

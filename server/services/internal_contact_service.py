@@ -14,11 +14,13 @@ class InternalContactService:
         self,
         bot_token: str | None = None,
         chat_id: str | None = None,
+        chat_id_environment_key: str = "TELEGRAM_INTERNAL_CHAT_ID",
         request_timeout_seconds: float = 10.0,
         urlopen_handler: UrlOpen = urlopen,
     ) -> None:
         self._bot_token = bot_token
         self._chat_id = chat_id
+        self._chat_id_environment_key = chat_id_environment_key
         self._request_timeout_seconds = request_timeout_seconds
         self._urlopen = urlopen_handler
 
@@ -38,7 +40,7 @@ class InternalContactService:
             }
 
         bot_token = self._configured_value(self._bot_token, "TELEGRAM_BOT_TOKEN")
-        chat_id = self._configured_value(self._chat_id, "TELEGRAM_INTERNAL_CHAT_ID")
+        chat_id = self._configured_value(self._chat_id, self._chat_id_environment_key)
         if not bot_token or not chat_id:
             return {
                 "sent": False,

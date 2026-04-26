@@ -237,9 +237,31 @@
               </span>
               <span>{{ toolCallStatusLabel(activity) }}</span>
               <span class="tool-state material-symbols-rounded" aria-hidden="true">
-                {{ activity.status === 'completed' ? 'check_circle' : 'progress_activity' }}
+                {{
+                  activity.status === 'completed'
+                    ? 'check_circle'
+                    : activity.status === 'denied'
+                      ? 'block'
+                      : activity.status === 'approval-required'
+                        ? 'hourglass_empty'
+                        : 'progress_activity'
+                }}
               </span>
             </div>
+            @if (activity.status === 'approval-required') {
+              <div class="tool-approval-preview">
+                <span>Message preview</span>
+                <p>{{ approvalPreview(activity) }}</p>
+              </div>
+              <div class="tool-approval-actions">
+                <button type="button" (click)="approveExternalContact(activity)" [disabled]="totoLoading()">
+                  Approve
+                </button>
+                <button type="button" (click)="denyExternalContact(activity)" [disabled]="totoLoading()">
+                  Deny
+                </button>
+              </div>
+            }
           </article>
           @if (message.text.trim()) {
             <article class="toto-message">

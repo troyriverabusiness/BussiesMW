@@ -76,7 +76,12 @@ type ChatMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' 
 interface ChatActivity {
   name: string;
   args?: Record<string, unknown>;
-  status: 'running' | 'completed';
+  status: 'running' | 'completed' | 'approval-required' | 'denied';
+}
+
+interface ApprovedToolCall {
+  name: string;
+  args: Record<string, unknown>;
 }
 
 interface ChatStreamEvent {
@@ -90,6 +95,10 @@ interface ChatStreamEvent {
   };
   tool_result?: {
     name: string;
+  };
+  approval_required?: {
+    name: string;
+    args: Record<string, unknown>;
   };
   error?: string;
 }
@@ -305,6 +314,53 @@ export class CaseWorkspaceComponent implements OnInit {
     }
   }
 
+  async approveExternalContact(activity: ChatActivity): Promise<void> {
+    if (this.chatLoading() || this.chatMessagesLoading()) {
+      return;
+    }
+
+    this.markActivityStatus(activity, 'completed');
+    const history = this.toChatHistory();
+    const sessionId = this.activeChatSessionId();
+    const message = 'Approved external contact.';
+    this.chatLoading.set(true);
+    this.appendMessage({ role: 'user', text: message });
+    this.appendMessage({ role: 'assistant', text: '', status: 'thinking', activities: [] });
+
+    try {
+      await this.streamChatResponse({
+        message,
+        caseId: this.caseId,
+        sessionId,
+        messages: history,
+        approvedToolCall: { name: activity.name, args: activity.args ?? {} },
+      });
+      this.ensureAssistantMessageText('Toto did not return a response.');
+      this.setLastAssistantStatus('complete');
+      this.loadChatSessions({ preserveActiveSession: true });
+    } catch (error) {
+      this.replaceLastAssistantMessage(this.chatFailureMessage(error));
+      this.setLastAssistantStatus('error');
+    } finally {
+      this.chatLoading.set(false);
+    }
+  }
+
+  denyExternalContact(activity: ChatActivity): void {
+    if (this.chatLoading() || this.chatMessagesLoading()) {
+      return;
+    }
+
+    this.markActivityStatus(activity, 'denied');
+    this.appendMessage({ role: 'user', text: 'Denied external contact.' });
+    this.appendMessage({
+      role: 'assistant',
+      text: 'External contact was not sent.',
+      status: 'complete',
+      activities: [],
+    });
+  }
+
   toggleTrace(traceId: string): void {
     this.expandedTraceIds.update((traceIds) => {
       const nextTraceIds = new Set(traceIds);
@@ -493,7 +549,13 @@ export class CaseWorkspaceComponent implements OnInit {
   }
 
   toolCallStatusLabel(activity: ChatActivity): string {
-    const action = activity.status === 'completed' ? 'Called tool' : 'Calling tool';
+    const actions: Record<ChatActivity['status'], string> = {
+      running: 'Calling tool',
+      completed: 'Called tool',
+      'approval-required': 'Approval required',
+      denied: 'Denied',
+    };
+    const action = actions[activity.status];
     return `${action}: ${this.activityLabel(activity)}`;
   }
 
@@ -503,6 +565,7 @@ export class CaseWorkspaceComponent implements OnInit {
       get_case: 'Case lookup',
       list_case_traces: 'Trace lookup',
       contact_internal_employee: 'Contact internal employee',
+      contact_external_person: 'Contact external person',
     };
     return labels[activity.name] ?? this.toTitleCase(activity.name.replace(/^get_/, '').replace(/_/g, ' '));
   }
@@ -513,8 +576,14 @@ export class CaseWorkspaceComponent implements OnInit {
       get_case: 'clinical_notes',
       list_case_traces: 'timeline',
       contact_internal_employee: 'mail',
+      contact_external_person: 'outgoing_mail',
     };
     return icons[activity.name] ?? 'construction';
+  }
+
+  approvalPreview(activity: ChatActivity): string {
+    const message = activity.args?.['message'];
+    return typeof message === 'string' ? message : '';
   }
 
   renderMessageText(text: string): string {
@@ -579,6 +648,7 @@ export class CaseWorkspaceComponent implements OnInit {
     caseId: string;
     sessionId: string | null;
     messages: ChatHistoryMessage[];
+    approvedToolCall?: ApprovedToolCall;
   }): Promise<void> {
     const response = await fetch(this.chatApiUrl, {
       method: 'POST',
@@ -633,6 +703,9 @@ export class CaseWorkspaceComponent implements OnInit {
     if (streamEvent.tool_result) {
       this.completeToolCall(streamEvent.tool_result.name);
     }
+    if (streamEvent.approval_required) {
+      this.markApprovalRequired(streamEvent.approval_required);
+    }
     if (streamEvent.content) {
       this.setLastAssistantStatus('responding');
       this.appendToLastAssistantMessage(streamEvent.content);
@@ -680,6 +753,38 @@ export class CaseWorkspaceComponent implements OnInit {
       }
       return nextMessages;
     });
+  }
+
+  private markApprovalRequired(toolCall: { name: string; args: Record<string, unknown> }): void {
+    this.messages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          status: 'using-tools',
+          activities: (lastMessage.activities ?? []).map((activity) =>
+            activity.name === toolCall.name ? { ...activity, status: 'approval-required' } : activity,
+          ),
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private markActivityStatus(activityToUpdate: ChatActivity, status: ChatActivity['status']): void {
+    this.messages.update((messages) =>
+      messages.map((message) => ({
+        ...message,
+        activities: message.activities?.map((activity) =>
+          activity === activityToUpdate ||
+          (activity.name === activityToUpdate.name &&
+            JSON.stringify(activity.args ?? {}) === JSON.stringify(activityToUpdate.args ?? {}))
+            ? { ...activity, status }
+            : activity,
+        ),
+      })),
+    );
   }
 
   private setLastAssistantStatus(status: ChatMessageStatus): void {

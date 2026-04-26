@@ -6,7 +6,7 @@ from uuid import UUID
 from data_access.chat_repository import ChatRepository
 from data_access.legal_case_repository import LegalCaseRepository
 from data_access.openai_chat_client import OpenAIChatClient
-from schemas.chat import ChatPersistedMessageResponse, ChatRequest, ChatSessionResponse
+from schemas.chat import ApprovedToolCall, ChatPersistedMessageResponse, ChatRequest, ChatSessionResponse
 from services.chat_tool_registry import ChatToolRegistry
 
 
@@ -70,7 +70,15 @@ class ChatService:
             tool_calls_log: list[dict[str, object]] = []
             tool_results_log: list[dict[str, object]] = []
 
-            yield from self._stream_model_loop(messages, assistant_content_parts, tool_calls_log, tool_results_log)
+            if payload.approved_tool_call:
+                yield from self._stream_approved_tool_call(
+                    payload.approved_tool_call,
+                    assistant_content_parts,
+                    tool_calls_log,
+                    tool_results_log,
+                )
+            else:
+                yield from self._stream_model_loop(messages, assistant_content_parts, tool_calls_log, tool_results_log)
             if session:
                 assistant_content = "".join(assistant_content_parts).strip()
                 if assistant_content:
@@ -114,6 +122,13 @@ class ChatService:
                 tool_args = self._parse_tool_args(str(tool_call["function"]["arguments"]))
                 tool_calls_log.append({"name": tool_name, "args": tool_args})
                 yield _sse_event({"tool_call": {"name": tool_name, "args": tool_args}})
+
+                if self._tool_registry.requires_approval(tool_name):
+                    approval_message = "Approval required before contacting the external person."
+                    assistant_content_parts.append(approval_message)
+                    yield _sse_event({"approval_required": {"name": tool_name, "args": tool_args}})
+                    yield _sse_event({"content": approval_message})
+                    return
 
                 tool_result = self._dispatch_tool(tool_name, tool_args)
                 tool_results_log.append({"name": tool_name})
@@ -171,6 +186,36 @@ class ChatService:
 
         return tool_calls
 
+    def _stream_approved_tool_call(
+        self,
+        approved_tool_call: ApprovedToolCall,
+        assistant_content_parts: list[str],
+        tool_calls_log: list[dict[str, object]],
+        tool_results_log: list[dict[str, object]],
+    ) -> Iterator[str]:
+        tool_name = approved_tool_call.name
+        tool_args = approved_tool_call.args
+        if not self._tool_registry.requires_approval(tool_name):
+            yield _sse_event({"error": f"Tool does not require approval: {tool_name}"})
+            return
+
+        tool_calls_log.append({"name": tool_name, "args": tool_args})
+        yield _sse_event({"tool_call": {"name": tool_name, "args": tool_args}})
+
+        raw_result = self._dispatch_tool(tool_name, tool_args)
+        tool_results_log.append({"name": tool_name})
+        yield _sse_event({"tool_result": {"name": tool_name}})
+
+        result = self._parse_tool_result(raw_result)
+        if result.get("sent") is True:
+            response_text = "External contact message sent."
+        else:
+            error = str(result.get("error") or "Unknown error.")
+            response_text = f"External contact message was not sent: {error}"
+
+        assistant_content_parts.append(response_text)
+        yield _sse_event({"content": response_text})
+
     def _build_messages(
         self,
         payload: ChatRequest,
@@ -183,7 +228,10 @@ class ChatService:
                     "You are Toto, a legal operations assistant. Use local tools when case "
                     "or traceability data is needed. Use the contact_internal_employee tool "
                     "when the user asks you to notify, message, escalate to, or contact an "
-                    "internal employee. Keep answers concise and grounded in the tool results."
+                    "internal employee. Use the contact_external_person tool when the user "
+                    "asks you to contact an external person; that tool will be paused for "
+                    "explicit user approval before it sends anything. Keep answers concise "
+                    "and grounded in the tool results."
                 ),
             }
         ]
@@ -263,3 +311,10 @@ class ChatService:
             return self._tool_registry.dispatch_json(name, args)
         except Exception as exc:
             return json.dumps({"error": str(exc)}, ensure_ascii=False)
+
+    def _parse_tool_result(self, raw_result: str) -> dict[str, Any]:
+        try:
+            result = json.loads(raw_result)
+        except json.JSONDecodeError:
+            return {}
+        return result if isinstance(result, dict) else {}

@@ -384,7 +384,8 @@ h2 {
 .thinking-card,
 .tool-call-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-direction: column;
   width: max-content;
   max-width: min(100%, 360px);
   gap: 9px;
@@ -401,6 +402,60 @@ h2 {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+
+.tool-approval-actions {
+  display: flex;
+  gap: 8px;
+  padding-left: 30px;
+}
+
+.tool-approval-preview {
+  width: min(320px, calc(100vw - 72px));
+  margin-left: 30px;
+  padding: 10px 12px;
+  border: 1px solid #dfe5ed;
+  border-radius: 6px;
+  background: #fbfcfe;
+  color: #273244;
+}
+
+.tool-approval-preview span {
+  display: block;
+  margin-bottom: 4px;
+  color: #7a8494;
+  font-size: 0.7rem;
+  font-weight: 760;
+}
+
+.tool-approval-preview p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.tool-approval-actions button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #d5dde7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #273244;
+  font-size: 0.76rem;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.tool-approval-actions button:hover:not(:disabled),
+.tool-approval-actions button:focus-visible:not(:disabled) {
+  border-color: #273244;
+}
+
+.tool-approval-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .message-status {

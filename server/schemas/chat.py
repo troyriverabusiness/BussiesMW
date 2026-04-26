@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,11 +10,17 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class ApprovedToolCall(BaseModel):
+    name: str
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
 class ChatRequest(BaseModel):
     message: str
     case_id: UUID | None = Field(default=None, alias="caseId")
     session_id: UUID | None = Field(default=None, alias="sessionId")
     messages: list[ChatMessage] = Field(default_factory=list)
+    approved_tool_call: ApprovedToolCall | None = Field(default=None, alias="approvedToolCall")
 
     model_config = ConfigDict(populate_by_name=True)
 

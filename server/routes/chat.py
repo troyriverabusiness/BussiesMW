@@ -30,6 +30,7 @@ def get_chat_service() -> ChatService:
         legal_case_service=legal_case_service,
         trace_service=trace_service,
         internal_contact_service=InternalContactService(),
+        external_contact_service=InternalContactService(chat_id_environment_key="TELEGRAM_EXTERNAL_CHAT_ID"),
     )
     return ChatService(
         openai_client=OpenAIChatClient(),

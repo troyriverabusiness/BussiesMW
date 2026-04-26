@@ -57,7 +57,12 @@ type TotoMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' 
 interface TotoActivity {
   name: string;
   args?: Record<string, unknown>;
-  status: 'running' | 'completed';
+  status: 'running' | 'completed' | 'approval-required' | 'denied';
+}
+
+interface ApprovedToolCall {
+  name: string;
+  args: Record<string, unknown>;
 }
 
 interface ChatStreamEvent {
@@ -68,6 +73,10 @@ interface ChatStreamEvent {
   };
   tool_result?: {
     name: string;
+  };
+  approval_required?: {
+    name: string;
+    args: Record<string, unknown>;
   };
   error?: string;
 }
@@ -222,7 +231,36 @@ export class DashboardComponent implements OnInit {
     void this.router.navigate(['/cases', legalCase.id]);
   }
 
-  private async sendTotoRequest(request: string, caseId?: string): Promise<void> {
+  approveExternalContact(activity: TotoActivity): void {
+    if (this.totoLoading()) {
+      return;
+    }
+
+    this.markActivityStatus(activity, 'completed');
+    this.sendTotoRequest('Approved external contact.', undefined, {
+      name: activity.name,
+      args: activity.args ?? {},
+    });
+  }
+
+  denyExternalContact(activity: TotoActivity): void {
+    if (this.totoLoading()) {
+      return;
+    }
+
+    this.markActivityStatus(activity, 'denied');
+    this.totoMessages.update((messages) => [
+      ...messages,
+      { role: 'user', text: 'Denied external contact.' },
+      { role: 'assistant', text: 'External contact was not sent.', status: 'complete', activities: [] },
+    ]);
+  }
+
+  private async sendTotoRequest(
+    request: string,
+    caseId?: string,
+    approvedToolCall?: ApprovedToolCall,
+  ): Promise<void> {
     this.totoLoading.set(true);
     const history = this.toChatHistory();
     this.totoMessages.update((messages) => [...messages, { role: 'user', text: request, caseId }]);
@@ -233,7 +271,7 @@ export class DashboardComponent implements OnInit {
     this.playTone(440, 0.025);
 
     try {
-      await this.streamChatResponse({ message: request, caseId, messages: history });
+      await this.streamChatResponse({ message: request, caseId, messages: history, approvedToolCall });
       this.ensureAssistantMessageText('Toto did not return a response.');
       this.setLastAssistantStatus('complete');
       this.playTone(660, 0.04);
@@ -303,7 +341,13 @@ export class DashboardComponent implements OnInit {
   }
 
   toolCallStatusLabel(activity: TotoActivity): string {
-    const action = activity.status === 'completed' ? 'Called tool' : 'Calling tool';
+    const actions: Record<TotoActivity['status'], string> = {
+      running: 'Calling tool',
+      completed: 'Called tool',
+      'approval-required': 'Approval required',
+      denied: 'Denied',
+    };
+    const action = actions[activity.status];
     return `${action}: ${this.activityLabel(activity)}`;
   }
 
@@ -313,6 +357,7 @@ export class DashboardComponent implements OnInit {
       get_case: 'Case lookup',
       list_case_traces: 'Trace lookup',
       contact_internal_employee: 'Contact internal employee',
+      contact_external_person: 'Contact external person',
     };
     return labels[activity.name] ?? this.toTitleCase(activity.name.replace(/^get_/, '').replace(/_/g, ' '));
   }
@@ -323,8 +368,14 @@ export class DashboardComponent implements OnInit {
       get_case: 'clinical_notes',
       list_case_traces: 'timeline',
       contact_internal_employee: 'mail',
+      contact_external_person: 'outgoing_mail',
     };
     return icons[activity.name] ?? 'construction';
+  }
+
+  approvalPreview(activity: TotoActivity): string {
+    const message = activity.args?.['message'];
+    return typeof message === 'string' ? message : '';
   }
 
   renderMessageText(text: string): string {
@@ -335,6 +386,7 @@ export class DashboardComponent implements OnInit {
     message: string;
     caseId?: string;
     messages: ChatHistoryMessage[];
+    approvedToolCall?: ApprovedToolCall;
   }): Promise<void> {
     const response = await fetch(this.chatApiUrl, {
       method: 'POST',
@@ -385,6 +437,9 @@ export class DashboardComponent implements OnInit {
     }
     if (event.tool_result) {
       this.completeToolCall(event.tool_result.name);
+    }
+    if (event.approval_required) {
+      this.markApprovalRequired(event.approval_required);
     }
     if (event.content) {
       this.setLastAssistantStatus('responding');
@@ -450,6 +505,38 @@ export class DashboardComponent implements OnInit {
       }
       return nextMessages;
     });
+  }
+
+  private markApprovalRequired(toolCall: { name: string; args: Record<string, unknown> }): void {
+    this.totoMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          status: 'using-tools',
+          activities: (lastMessage.activities ?? []).map((activity) =>
+            activity.name === toolCall.name ? { ...activity, status: 'approval-required' } : activity,
+          ),
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private markActivityStatus(activityToUpdate: TotoActivity, status: TotoActivity['status']): void {
+    this.totoMessages.update((messages) =>
+      messages.map((message) => ({
+        ...message,
+        activities: message.activities?.map((activity) =>
+          activity === activityToUpdate ||
+          (activity.name === activityToUpdate.name &&
+            JSON.stringify(activity.args ?? {}) === JSON.stringify(activityToUpdate.args ?? {}))
+            ? { ...activity, status }
+            : activity,
+        ),
+      })),
+    );
   }
 
   private setLastAssistantStatus(status: TotoMessageStatus): void {

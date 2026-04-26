@@ -29,15 +29,19 @@ class ChatToolRegistry:
         legal_case_service: LegalCaseService,
         trace_service: TraceService,
         internal_contact_service: InternalContactService,
+        external_contact_service: InternalContactService,
     ) -> None:
         self._legal_case_service = legal_case_service
         self._trace_service = trace_service
         self._internal_contact_service = internal_contact_service
+        self._external_contact_service = external_contact_service
+        self._approval_required_tools = {"contact_external_person"}
         self._handlers: dict[str, ToolHandler] = {
             "list_cases": self._list_cases,
             "get_case": self._get_case,
             "list_case_traces": self._list_case_traces,
             "contact_internal_employee": self._contact_internal_employee,
+            "contact_external_person": self._contact_external_person,
         }
 
     @property
@@ -108,7 +112,30 @@ class ChatToolRegistry:
                     },
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "contact_external_person",
+                    "description": (
+                        "Contact an external person by sending a Telegram message to the configured external recipient. "
+                        "This tool requires explicit user approval before execution."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message": {
+                                "type": "string",
+                                "description": "Plain-text message to send to the configured external person.",
+                            },
+                        },
+                        "required": ["message"],
+                    },
+                },
+            },
         ]
+
+    def requires_approval(self, name: str) -> bool:
+        return name in self._approval_required_tools
 
     def dispatch_json(self, name: str, args: dict[str, Any]) -> str:
         handler = self._handlers.get(name)
@@ -135,6 +162,10 @@ class ChatToolRegistry:
     def _contact_internal_employee(self, args: dict[str, Any]) -> dict[str, Any]:
         message = str(args.get("message") or "").strip()
         return self._internal_contact_service.send_message(message)
+
+    def _contact_external_person(self, args: dict[str, Any]) -> dict[str, Any]:
+        message = str(args.get("message") or "").strip()
+        return self._external_contact_service.send_message(message)
 
     def _parse_case_id(self, args: dict[str, Any]) -> UUID:
         case_id = args.get("case_id") or args.get("caseId")
