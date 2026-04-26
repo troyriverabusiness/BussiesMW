@@ -31,3 +31,23 @@ Example response:
   "message": "Server is running"
 }
 ```
+
+### Telegram internal contact tool
+
+The chat agent includes a `contact_internal_employee` tool, shown in the UI as
+`Contact internal employee`. It sends a plain-text Telegram message to one
+configured internal recipient.
+
+Setup:
+
+1. Create a Telegram bot with BotFather and copy the bot token.
+2. Start a chat with the bot, or add the bot to the target internal chat.
+3. Set these values in `.env`:
+
+```bash
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_INTERNAL_CHAT_ID=your_internal_chat_id
+```
+
+The recipient is fixed by environment configuration; the agent only supplies the
+message text.

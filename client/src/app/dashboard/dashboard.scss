@@ -385,7 +385,8 @@ h2 {
 .tool-call-card {
   display: flex;
   align-items: center;
-  width: min(100%, 360px);
+  width: max-content;
+  max-width: min(100%, 360px);
   gap: 9px;
   padding: 0 2px;
   color: #5f6b7c;
@@ -415,8 +416,24 @@ h2 {
   font-size: 1rem;
 }
 
+.tool-call-card .tool-icon {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  border: 1px solid #dfe5ed;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.tool-call-card .tool-state {
+  margin-left: 1px;
+  font-size: 0.9rem;
+}
+
 .thinking-card.live .message-status .material-symbols-rounded,
-.tool-call-card.live .message-status .material-symbols-rounded {
+.tool-call-card.live .tool-state {
   animation: activity-spin 900ms linear infinite;
 }
 
@@ -427,7 +444,7 @@ h2 {
   font-size: 0.75rem;
 }
 
-.tool-call-card.complete .message-status .material-symbols-rounded {
+.tool-call-card.complete .tool-state {
   color: #15803d;
 }
 

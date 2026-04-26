@@ -232,13 +232,13 @@
             [class.live]="activity.status === 'running'"
           >
             <div class="message-status">
-              <span class="material-symbols-rounded" aria-hidden="true">
-                {{ activity.status === 'completed' ? 'check_circle' : 'build_circle' }}
+              <span class="tool-icon material-symbols-rounded" aria-hidden="true">
+                {{ activityIcon(activity) }}
               </span>
               <span>{{ toolCallStatusLabel(activity) }}</span>
-            </div>
-            <div class="tool-call-body">
-              <span>{{ activityDetail(activity) }}</span>
+              <span class="tool-state material-symbols-rounded" aria-hidden="true">
+                {{ activity.status === 'completed' ? 'check_circle' : 'progress_activity' }}
+              </span>
             </div>
           </article>
           @if (message.text.trim()) {

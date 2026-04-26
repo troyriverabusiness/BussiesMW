@@ -587,6 +587,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  width: max-content;
   max-width: min(620px, 78%);
   padding: 0 2px;
   color: #52525b;
@@ -620,8 +621,24 @@
   font-size: 1rem;
 }
 
+.tool-call-card .tool-icon {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.tool-call-card .tool-state {
+  margin-left: 1px;
+  font-size: 0.9rem;
+}
+
 .thinking-card.live .message-status .material-symbols-rounded,
-.tool-call-card.live .message-status .material-symbols-rounded {
+.tool-call-card.live .tool-state {
   animation: activity-spin 900ms linear infinite;
 }
 
@@ -631,7 +648,7 @@
   font-size: 0.76rem;
 }
 
-.tool-call-card.complete .message-status .material-symbols-rounded {
+.tool-call-card.complete .tool-state {
   color: #15803d;
 }
 

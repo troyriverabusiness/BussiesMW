@@ -312,30 +312,19 @@ export class DashboardComponent implements OnInit {
       list_cases: 'List cases',
       get_case: 'Case lookup',
       list_case_traces: 'Trace lookup',
+      contact_internal_employee: 'Contact internal employee',
     };
     return labels[activity.name] ?? this.toTitleCase(activity.name.replace(/^get_/, '').replace(/_/g, ' '));
   }
 
-  activityDetail(activity: TotoActivity): string {
-    const metadata = this.activityMetadata(activity);
-    const details: Record<string, string> = {
-      list_cases: 'Reads available legal cases from the local registry',
-      get_case: 'Fetches detailed case data',
-      list_case_traces: 'Fetches trace records and agent steps',
+  activityIcon(activity: TotoActivity): string {
+    const icons: Record<string, string> = {
+      list_cases: 'folder_open',
+      get_case: 'clinical_notes',
+      list_case_traces: 'timeline',
+      contact_internal_employee: 'mail',
     };
-    const detail = details[activity.name] ?? 'Runs a workspace tool';
-    return metadata ? `${detail} · ${metadata}` : detail;
-  }
-
-  private activityMetadata(activity: TotoActivity): string {
-    const caseId = activity.args?.['case_id'] ?? activity.args?.['caseId'];
-    if (typeof caseId === 'string' && caseId.trim()) {
-      return `case_id: ${caseId}`;
-    }
-    const args = Object.entries(activity.args ?? {})
-      .filter(([, value]) => value !== null && value !== undefined && value !== '')
-      .map(([key, value]) => `${key}: ${String(value)}`);
-    return args.slice(0, 2).join(' · ');
+    return icons[activity.name] ?? 'construction';
   }
 
   renderMessageText(text: string): string {

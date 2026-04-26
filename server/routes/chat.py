@@ -10,6 +10,7 @@ from data_access.trace_repository import TraceRepository
 from schemas.chat import ChatPersistedMessageResponse, ChatRequest, ChatSessionCreateRequest, ChatSessionResponse
 from services.chat_service import ChatService
 from services.chat_tool_registry import ChatToolRegistry
+from services.internal_contact_service import InternalContactService
 from services.legal_case_service import LegalCaseService
 from services.trace_service import TraceService
 from supabase_client import SupabaseConfigurationError
@@ -28,6 +29,7 @@ def get_chat_service() -> ChatService:
     tool_registry = ChatToolRegistry(
         legal_case_service=legal_case_service,
         trace_service=trace_service,
+        internal_contact_service=InternalContactService(),
     )
     return ChatService(
         openai_client=OpenAIChatClient(),

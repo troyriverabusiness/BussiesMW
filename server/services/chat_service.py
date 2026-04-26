@@ -181,8 +181,9 @@ class ChatService:
                 "role": "system",
                 "content": (
                     "You are Toto, a legal operations assistant. Use local tools when case "
-                    "or traceability data is needed. Keep answers concise and grounded in "
-                    "the tool results."
+                    "or traceability data is needed. Use the contact_internal_employee tool "
+                    "when the user asks you to notify, message, escalate to, or contact an "
+                    "internal employee. Keep answers concise and grounded in the tool results."
                 ),
             }
         ]
