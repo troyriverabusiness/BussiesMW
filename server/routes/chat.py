@@ -8,6 +8,7 @@ from data_access.legal_case_repository import LegalCaseRepository, LegalCaseRepo
 from data_access.openai_chat_client import OpenAIChatClient
 from data_access.trace_repository import TraceRepository
 from schemas.chat import ChatPersistedMessageResponse, ChatRequest, ChatSessionCreateRequest, ChatSessionResponse
+from services.chat_agent_service import ChatAgentService
 from services.chat_service import ChatService
 from services.chat_tool_registry import ChatToolRegistry
 from services.internal_contact_service import InternalContactService
@@ -22,6 +23,7 @@ router = APIRouter()
 
 def get_chat_service() -> ChatService:
     case_repository = LegalCaseRepository()
+    openai_client = OpenAIChatClient()
     legal_case_service = LegalCaseService(repository=case_repository)
     trace_service = TraceService(
         case_repository=case_repository,
@@ -34,8 +36,14 @@ def get_chat_service() -> ChatService:
         external_contact_service=InternalContactService(chat_id_environment_key="TELEGRAM_EXTERNAL_CHAT_ID"),
         legal_document_service=LegalDocumentService(),
     )
+    tool_registry.set_chat_agent_service(
+        ChatAgentService(
+            openai_client=openai_client,
+            tool_provider=tool_registry,
+        )
+    )
     return ChatService(
-        openai_client=OpenAIChatClient(),
+        openai_client=openai_client,
         tool_registry=tool_registry,
         chat_repository=ChatRepository(),
         case_repository=case_repository,

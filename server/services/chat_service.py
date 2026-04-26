@@ -122,6 +122,17 @@ class ChatService:
                 tool_args = self._parse_tool_args(str(tool_call["function"]["arguments"]))
                 tool_calls_log.append({"name": tool_name, "args": tool_args})
                 yield _sse_event({"tool_call": {"name": tool_name, "args": tool_args}})
+                agent = self._tool_registry.agent_for_tool(tool_name)
+                if agent:
+                    yield _sse_event(
+                        {
+                            "agent_start": {
+                                "name": agent.name,
+                                "label": agent.label,
+                                "task": str(tool_args.get("task") or ""),
+                            }
+                        }
+                    )
 
                 if self._tool_registry.requires_approval(tool_name):
                     approval_message = "Approval required before contacting the external person."
@@ -132,11 +143,41 @@ class ChatService:
 
                 tool_result = self._dispatch_tool(tool_name, tool_args)
                 parsed_tool_result = self._parse_tool_result(tool_result)
+                if agent:
+                    agent_error = parsed_tool_result.get("error")
+                    if agent_error:
+                        yield _sse_event(
+                            {
+                                "agent_error": {
+                                    "name": agent.name,
+                                    "label": agent.label,
+                                    "error": str(agent_error),
+                                }
+                            }
+                        )
+                    else:
+                        yield _sse_event(
+                            {
+                                "agent_result": {
+                                    "name": agent.name,
+                                    "label": agent.label,
+                                    "confidence": parsed_tool_result.get("confidence"),
+                                    "requiresHumanReview": bool(parsed_tool_result.get("requiresHumanReview")),
+                                }
+                            }
+                        )
                 artifact = parsed_tool_result.get("artifact")
                 if isinstance(artifact, dict):
                     tool_results_log.append({"name": tool_name, "artifact": artifact})
                 else:
                     tool_results_log.append({"name": tool_name})
+                if agent:
+                    tool_results_log[-1] = {
+                        **tool_results_log[-1],
+                        "agent": {"name": agent.name, "label": agent.label},
+                        "confidence": parsed_tool_result.get("confidence"),
+                        "requiresHumanReview": bool(parsed_tool_result.get("requiresHumanReview")),
+                    }
                 yield _sse_event({"tool_result": {"name": tool_name}})
                 if isinstance(artifact, dict):
                     yield _sse_event({"download": artifact})
@@ -232,17 +273,19 @@ class ChatService:
             {
                 "role": "system",
                 "content": (
-                    "You are Veritas, a legal operations assistant. Use local tools when case "
-                    "or traceability data is needed. Use the contact_internal_employee tool "
-                    "when the user asks you to notify, message, escalate to, or contact an "
-                    "internal employee. Use the contact_external_person tool when the user "
-                    "asks you to contact an external person; that tool will be paused for "
-                    "explicit user approval before it sends anything. Use the "
-                    "generate_legal_document_pdf tool when the user asks you to draft, create, "
-                    "generate, download, prepare, or produce a legal document such as a court "
-                    "order, contract, agreement, notice, letter, or filing. Draft complete, "
-                    "formal sections for the tool arguments; include the current case ID when "
-                    "available. Keep answers concise and grounded in the tool results."
+                    "You are Veritas, a legal operations supervisor assistant. Delegate to "
+                    "specialized agents when their narrower expertise is needed, then synthesize "
+                    "their results for the user. Use analyze_case for status, risk, case-summary, "
+                    "information-gap, priority, and next-action questions. Use review_traceability "
+                    "for audit trail, evidence, trace confidence, reasoning, and human-review "
+                    "questions. Use draft_legal_document for legal drafting, document preparation, "
+                    "and PDF generation requests. Use prepare_contact_message before notifications, "
+                    "escalations, or contact-message drafting. Use local tools directly only for "
+                    "simple lookups. Use contact_internal_employee when the user asks you to notify, "
+                    "message, escalate to, or contact an internal employee. Use contact_external_person "
+                    "only when the user asks you to contact an external person; that tool will be "
+                    "paused for explicit user approval before it sends anything. Include the current "
+                    "case ID when available. Keep answers concise and grounded in tool and agent results."
                 ),
             }
         ]

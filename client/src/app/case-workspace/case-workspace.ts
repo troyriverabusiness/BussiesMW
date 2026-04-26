@@ -36,6 +36,7 @@ interface ChatMessage {
   text: string;
   status?: ChatMessageStatus;
   activities?: ChatActivity[];
+  agentActivities?: ChatAgentActivity[];
   attachments?: ChatDocumentAttachment[];
   createdAt?: string;
 }
@@ -72,6 +73,12 @@ interface PersistedToolCall {
 interface PersistedToolResult {
   name: string;
   artifact?: ChatDocumentAttachment;
+  agent?: {
+    name: string;
+    label: string;
+  };
+  confidence?: number;
+  requiresHumanReview?: boolean;
 }
 
 type ChatMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' | 'error';
@@ -80,6 +87,16 @@ interface ChatActivity {
   name: string;
   args?: Record<string, unknown>;
   status: 'running' | 'completed' | 'approval-required' | 'denied';
+}
+
+interface ChatAgentActivity {
+  name: string;
+  label: string;
+  task?: string;
+  status: 'running' | 'completed' | 'error';
+  confidence?: number;
+  requiresHumanReview?: boolean;
+  error?: string;
 }
 
 interface ChatDocumentAttachment {
@@ -112,6 +129,22 @@ interface ChatStreamEvent {
   approval_required?: {
     name: string;
     args: Record<string, unknown>;
+  };
+  agent_start?: {
+    name: string;
+    label: string;
+    task?: string;
+  };
+  agent_result?: {
+    name: string;
+    label: string;
+    confidence?: number;
+    requiresHumanReview?: boolean;
+  };
+  agent_error?: {
+    name: string;
+    label: string;
+    error: string;
   };
   error?: string;
 }
@@ -292,6 +325,7 @@ export class CaseWorkspaceComponent implements OnInit {
                 createdAt: message.createdAt,
                 status: message.role === 'assistant' ? 'complete' : undefined,
                 activities: activities.length ? activities : undefined,
+                agentActivities: this.persistedAgentActivities(message),
                 attachments: this.persistedToolAttachments(message),
               };
             }),
@@ -527,7 +561,7 @@ export class CaseWorkspaceComponent implements OnInit {
     if (message.status === 'thinking') {
       return 'Reviewing case context';
     }
-    return message.activities?.length ? 'Workspace context checked' : '';
+    return message.activities?.length || message.agentActivities?.length ? 'Workspace context checked' : '';
   }
 
   assistantStatusIcon(message: ChatMessage): string {
@@ -578,6 +612,21 @@ export class CaseWorkspaceComponent implements OnInit {
     return `${action}: ${this.activityLabel(activity)}`;
   }
 
+  agentActivityStatusLabel(activity: ChatAgentActivity): string {
+    if (activity.status === 'completed') {
+      const confidence =
+        typeof activity.confidence === 'number' && activity.confidence > 0
+          ? ` · confidence ${this.formatPercent(activity.confidence)}`
+          : '';
+      const review = activity.requiresHumanReview ? ' · human review recommended' : '';
+      return `${activity.label} completed${confidence}${review}`;
+    }
+    if (activity.status === 'error') {
+      return `${activity.label} stopped`;
+    }
+    return `${activity.label} running`;
+  }
+
   activityLabel(activity: ChatActivity): string {
     const labels: Record<string, string> = {
       list_cases: 'List cases',
@@ -600,6 +649,16 @@ export class CaseWorkspaceComponent implements OnInit {
       generate_legal_document_pdf: 'contract',
     };
     return icons[activity.name] ?? 'construction';
+  }
+
+  agentActivityIcon(activity: ChatAgentActivity): string {
+    const icons: Record<string, string> = {
+      case_analysis_agent: 'clinical_notes',
+      traceability_agent: 'account_tree',
+      document_drafting_agent: 'contract',
+      contact_planning_agent: 'outgoing_mail',
+    };
+    return icons[activity.name] ?? 'psychology';
   }
 
   approvalPreview(activity: ChatActivity): string {
@@ -730,6 +789,15 @@ export class CaseWorkspaceComponent implements OnInit {
     if (streamEvent.approval_required) {
       this.markApprovalRequired(streamEvent.approval_required);
     }
+    if (streamEvent.agent_start) {
+      this.recordAgentStart(streamEvent.agent_start);
+    }
+    if (streamEvent.agent_result) {
+      this.completeAgentActivity(streamEvent.agent_result);
+    }
+    if (streamEvent.agent_error) {
+      this.failAgentActivity(streamEvent.agent_error);
+    }
     if (streamEvent.content) {
       this.setLastAssistantStatus('responding');
       this.appendToLastAssistantMessage(streamEvent.content);
@@ -745,6 +813,10 @@ export class CaseWorkspaceComponent implements OnInit {
   }
 
   private recordToolCall(toolCall: { name: string; args: Record<string, unknown> }): void {
+    if (this.isSpecializedAgentTool(toolCall.name)) {
+      return;
+    }
+
     this.messages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
@@ -763,6 +835,10 @@ export class CaseWorkspaceComponent implements OnInit {
   }
 
   private completeToolCall(toolName: string): void {
+    if (this.isSpecializedAgentTool(toolName)) {
+      return;
+    }
+
     this.messages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
@@ -780,6 +856,10 @@ export class CaseWorkspaceComponent implements OnInit {
   }
 
   private markApprovalRequired(toolCall: { name: string; args: Record<string, unknown> }): void {
+    if (this.isSpecializedAgentTool(toolCall.name)) {
+      return;
+    }
+
     this.messages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
@@ -811,6 +891,63 @@ export class CaseWorkspaceComponent implements OnInit {
       return nextMessages;
     });
     this.triggerDownload(downloadableAttachment);
+  }
+
+  private recordAgentStart(agent: { name: string; label: string; task?: string }): void {
+    this.messages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        const existingActivities = lastMessage.agentActivities ?? [];
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          status: 'using-tools',
+          agentActivities: [
+            ...existingActivities.filter((activity) => activity.name !== agent.name),
+            { name: agent.name, label: agent.label, task: agent.task, status: 'running' },
+          ],
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private completeAgentActivity(agent: {
+    name: string;
+    label: string;
+    confidence?: number;
+    requiresHumanReview?: boolean;
+  }): void {
+    this.updateAgentActivity(agent.name, {
+      label: agent.label,
+      status: 'completed',
+      confidence: agent.confidence,
+      requiresHumanReview: agent.requiresHumanReview,
+    });
+  }
+
+  private failAgentActivity(agent: { name: string; label: string; error: string }): void {
+    this.updateAgentActivity(agent.name, {
+      label: agent.label,
+      status: 'error',
+      error: agent.error,
+    });
+  }
+
+  private updateAgentActivity(name: string, updates: Partial<ChatAgentActivity>): void {
+    this.messages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          agentActivities: (lastMessage.agentActivities ?? []).map((activity) =>
+            activity.name === name ? { ...activity, ...updates } : activity,
+          ),
+        };
+      }
+      return nextMessages;
+    });
   }
 
   private markActivityStatus(activityToUpdate: ChatActivity, status: ChatActivity['status']): void {
@@ -872,7 +1009,9 @@ export class CaseWorkspaceComponent implements OnInit {
       return [];
     }
 
-    const toolCalls = this.asPersistedToolCalls(message.toolCalls);
+    const toolCalls = this.asPersistedToolCalls(message.toolCalls).filter(
+      (toolCall) => !this.isSpecializedAgentTool(toolCall.name),
+    );
     if (!toolCalls.length) {
       return [];
     }
@@ -909,8 +1048,39 @@ export class CaseWorkspaceComponent implements OnInit {
         return [];
       }
       const artifact = this.asDocumentAttachment(item['artifact']);
-      return [{ name: item['name'], artifact }];
+      const agent = this.asPersistedAgent(item['agent']);
+      const confidence = typeof item['confidence'] === 'number' ? item['confidence'] : undefined;
+      const requiresHumanReview =
+        typeof item['requiresHumanReview'] === 'boolean' ? item['requiresHumanReview'] : undefined;
+      return [{ name: item['name'], artifact, agent, confidence, requiresHumanReview }];
     });
+  }
+
+  private persistedAgentActivities(message: PersistedChatMessage): ChatAgentActivity[] | undefined {
+    if (message.role !== 'assistant') {
+      return undefined;
+    }
+
+    const agentResults = new Map(
+      this.asPersistedToolResults(message.toolResults)
+        .filter((result) => result.agent)
+        .map((result) => [result.name, result]),
+    );
+    const activities = this.asPersistedToolCalls(message.toolCalls)
+      .filter((toolCall) => this.isSpecializedAgentTool(toolCall.name))
+      .map((toolCall) => {
+        const result = agentResults.get(toolCall.name);
+        const agent = result?.agent ?? this.agentForSpecializedTool(toolCall.name);
+        return {
+          name: agent.name,
+          label: agent.label,
+          task: typeof toolCall.args?.['task'] === 'string' ? toolCall.args['task'] : undefined,
+          status: result ? 'completed' : 'running',
+          confidence: result?.confidence,
+          requiresHumanReview: result?.requiresHumanReview,
+        } satisfies ChatAgentActivity;
+      });
+    return activities.length ? activities : undefined;
   }
 
   private persistedToolAttachments(message: PersistedChatMessage): ChatDocumentAttachment[] | undefined {
@@ -945,6 +1115,13 @@ export class CaseWorkspaceComponent implements OnInit {
     };
   }
 
+  private asPersistedAgent(value: unknown): { name: string; label: string } | undefined {
+    if (!this.isRecord(value) || typeof value['name'] !== 'string' || typeof value['label'] !== 'string') {
+      return undefined;
+    }
+    return { name: value['name'], label: value['label'] };
+  }
+
   private triggerDownload(attachment: ChatDocumentAttachment): void {
     const link = document.createElement('a');
     link.href = attachment.downloadUrl;
@@ -965,6 +1142,20 @@ export class CaseWorkspaceComponent implements OnInit {
 
   private toTitleCase(value: string): string {
     return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  private isSpecializedAgentTool(name: string): boolean {
+    return ['analyze_case', 'review_traceability', 'draft_legal_document', 'prepare_contact_message'].includes(name);
+  }
+
+  private agentForSpecializedTool(toolName: string): { name: string; label: string } {
+    const agents: Record<string, { name: string; label: string }> = {
+      analyze_case: { name: 'case_analysis_agent', label: 'Case analysis agent' },
+      review_traceability: { name: 'traceability_agent', label: 'Traceability agent' },
+      draft_legal_document: { name: 'document_drafting_agent', label: 'Document drafting agent' },
+      prepare_contact_message: { name: 'contact_planning_agent', label: 'Contact planning agent' },
+    };
+    return agents[toolName] ?? { name: toolName, label: this.toTitleCase(toolName.replace(/_/g, ' ')) };
   }
 
   private markdownToHtml(source: string): string {

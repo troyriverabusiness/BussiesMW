@@ -441,6 +441,10 @@ h2 {
   width: max-content;
 }
 
+.tool-call-card.error {
+  color: #b91c1c;
+}
+
 .message-status,
 .tool-call-body {
   display: flex;
@@ -545,6 +549,10 @@ h2 {
 
 .tool-call-card.complete .tool-state {
   color: #15803d;
+}
+
+.tool-call-card.error .tool-state {
+  color: #b91c1c;
 }
 
 .tool-call-body span {
