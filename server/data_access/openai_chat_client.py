@@ -28,6 +28,24 @@ class OpenAIChatClient:
             tool_choice="auto",
         )
 
+    def create_completion(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
+    ) -> Any:
+        payload: dict[str, Any] = {
+            "model": self._chat_model,
+            "messages": messages,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        if response_format:
+            payload["response_format"] = response_format
+
+        return self._get_client().chat.completions.create(**payload)
+
     @property
     def _chat_model(self) -> str:
         return os.getenv("OPENAI_CHAT_MODEL", DEFAULT_OPENAI_CHAT_MODEL).strip() or DEFAULT_OPENAI_CHAT_MODEL

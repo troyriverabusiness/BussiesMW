@@ -45,6 +45,8 @@ interface VeritasMessage {
   caseId?: string;
   status?: VeritasMessageStatus;
   activities?: VeritasActivity[];
+  agentActivities?: VeritasAgentActivity[];
+  attachments?: ChatDocumentAttachment[];
 }
 
 interface ChatHistoryMessage {
@@ -59,6 +61,25 @@ interface VeritasActivity {
   args?: Record<string, unknown>;
   result?: unknown;
   status: 'running' | 'completed' | 'approval-required' | 'denied';
+}
+
+interface VeritasAgentActivity {
+  name: string;
+  label: string;
+  task?: string;
+  status: 'running' | 'completed' | 'error';
+  confidence?: number;
+  requiresHumanReview?: boolean;
+  error?: string;
+}
+
+interface ChatDocumentAttachment {
+  artifactId: string;
+  filename: string;
+  contentType: string;
+  downloadUrl: string;
+  description?: string;
+  downloaded?: boolean;
 }
 
 interface ApprovedToolCall {
@@ -76,9 +97,26 @@ interface ChatStreamEvent {
     name: string;
     result?: unknown;
   };
+  download?: ChatDocumentAttachment;
   approval_required?: {
     name: string;
     args: Record<string, unknown>;
+  };
+  agent_start?: {
+    name: string;
+    label: string;
+    task?: string;
+  };
+  agent_result?: {
+    name: string;
+    label: string;
+    confidence?: number;
+    requiresHumanReview?: boolean;
+  };
+  agent_error?: {
+    name: string;
+    label: string;
+    error: string;
   };
   error?: string;
 }
@@ -302,7 +340,7 @@ export class DashboardComponent implements OnInit {
     if (message.status === 'thinking') {
       return 'Reviewing context';
     }
-    return message.activities?.length ? 'Context checked' : '';
+    return message.activities?.length || message.agentActivities?.length ? 'Context checked' : '';
   }
 
   assistantStatusIcon(message: VeritasMessage): string {
@@ -357,6 +395,21 @@ export class DashboardComponent implements OnInit {
     return `${action}: ${this.activityLabel(activity)}`;
   }
 
+  agentActivityStatusLabel(activity: VeritasAgentActivity): string {
+    if (activity.status === 'completed') {
+      const confidence =
+        typeof activity.confidence === 'number' && activity.confidence > 0
+          ? ` · confidence ${this.formatPercent(activity.confidence)}`
+          : '';
+      const review = activity.requiresHumanReview ? ' · human review recommended' : '';
+      return `${activity.label} completed${confidence}${review}`;
+    }
+    if (activity.status === 'error') {
+      return `${activity.label} stopped`;
+    }
+    return `${activity.label} running`;
+  }
+
   activityLabel(activity: VeritasActivity): string {
     const labels: Record<string, string> = {
       list_cases: 'List cases',
@@ -365,6 +418,7 @@ export class DashboardComponent implements OnInit {
       legal_data_hub_search: 'Legal Data Hub',
       contact_internal_employee: 'Contact internal employee',
       contact_external_person: 'Contact external person',
+      generate_legal_document_pdf: 'Generate legal PDF',
     };
     return labels[activity.name] ?? this.toTitleCase(activity.name.replace(/^get_/, '').replace(/_/g, ' '));
   }
@@ -377,8 +431,19 @@ export class DashboardComponent implements OnInit {
       legal_data_hub_search: 'policy',
       contact_internal_employee: 'mail',
       contact_external_person: 'outgoing_mail',
+      generate_legal_document_pdf: 'contract',
     };
     return icons[activity.name] ?? 'construction';
+  }
+
+  agentActivityIcon(activity: VeritasAgentActivity): string {
+    const icons: Record<string, string> = {
+      case_analysis_agent: 'clinical_notes',
+      traceability_agent: 'account_tree',
+      document_drafting_agent: 'contract',
+      contact_planning_agent: 'outgoing_mail',
+    };
+    return icons[activity.name] ?? 'psychology';
   }
 
   approvalPreview(activity: VeritasActivity): string {
@@ -446,8 +511,20 @@ export class DashboardComponent implements OnInit {
     if (event.tool_result) {
       this.completeToolCall(event.tool_result.name, event.tool_result.result);
     }
+    if (event.download) {
+      this.recordDownload(event.download);
+    }
     if (event.approval_required) {
       this.markApprovalRequired(event.approval_required);
+    }
+    if (event.agent_start) {
+      this.recordAgentStart(event.agent_start);
+    }
+    if (event.agent_result) {
+      this.completeAgentActivity(event.agent_result);
+    }
+    if (event.agent_error) {
+      this.failAgentActivity(event.agent_error);
     }
     if (event.content) {
       this.setLastAssistantStatus('responding');
@@ -481,6 +558,10 @@ export class DashboardComponent implements OnInit {
   }
 
   private recordToolCall(toolCall: { name: string; args: Record<string, unknown> }): void {
+    if (this.isSpecializedAgentTool(toolCall.name)) {
+      return;
+    }
+
     this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
@@ -499,6 +580,10 @@ export class DashboardComponent implements OnInit {
   }
 
   private completeToolCall(toolName: string, result?: unknown): void {
+    if (this.isSpecializedAgentTool(toolName)) {
+      return;
+    }
+
     this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
@@ -516,6 +601,10 @@ export class DashboardComponent implements OnInit {
   }
 
   private markApprovalRequired(toolCall: { name: string; args: Record<string, unknown> }): void {
+    if (this.isSpecializedAgentTool(toolCall.name)) {
+      return;
+    }
+
     this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
@@ -525,6 +614,85 @@ export class DashboardComponent implements OnInit {
           status: 'using-tools',
           activities: (lastMessage.activities ?? []).map((activity) =>
             activity.name === toolCall.name ? { ...activity, status: 'approval-required' } : activity,
+          ),
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private recordDownload(attachment: ChatDocumentAttachment): void {
+    if (!attachment.downloadUrl) {
+      return;
+    }
+
+    const downloadUrl = this.absoluteArtifactUrl(attachment.downloadUrl);
+    const downloadableAttachment = { ...attachment, downloadUrl, downloaded: true };
+    this.veritasMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          attachments: [...(lastMessage.attachments ?? []), downloadableAttachment],
+        };
+      }
+      return nextMessages;
+    });
+    this.openAttachment(downloadableAttachment);
+    this.triggerDownload(downloadableAttachment);
+  }
+
+  private recordAgentStart(agent: { name: string; label: string; task?: string }): void {
+    this.veritasMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        const existingActivities = lastMessage.agentActivities ?? [];
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          status: 'using-tools',
+          agentActivities: [
+            ...existingActivities.filter((activity) => activity.name !== agent.name),
+            { name: agent.name, label: agent.label, task: agent.task, status: 'running' },
+          ],
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private completeAgentActivity(agent: {
+    name: string;
+    label: string;
+    confidence?: number;
+    requiresHumanReview?: boolean;
+  }): void {
+    this.updateAgentActivity(agent.name, {
+      label: agent.label,
+      status: 'completed',
+      confidence: agent.confidence,
+      requiresHumanReview: agent.requiresHumanReview,
+    });
+  }
+
+  private failAgentActivity(agent: { name: string; label: string; error: string }): void {
+    this.updateAgentActivity(agent.name, {
+      label: agent.label,
+      status: 'error',
+      error: agent.error,
+    });
+  }
+
+  private updateAgentActivity(name: string, updates: Partial<VeritasAgentActivity>): void {
+    this.veritasMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          agentActivities: (lastMessage.agentActivities ?? []).map((activity) =>
+            activity.name === name ? { ...activity, ...updates } : activity,
           ),
         };
       }
@@ -573,6 +741,14 @@ export class DashboardComponent implements OnInit {
 
   private toTitleCase(value: string): string {
     return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  private isSpecializedAgentTool(name: string): boolean {
+    return ['analyze_case', 'review_traceability', 'draft_legal_document', 'prepare_contact_message'].includes(name);
+  }
+
+  private formatPercent(value: number): string {
+    return `${Math.round(value * 100)}%`;
   }
 
   private markdownToHtml(source: string): string {
@@ -632,6 +808,27 @@ export class DashboardComponent implements OnInit {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  private triggerDownload(attachment: ChatDocumentAttachment): void {
+    const link = document.createElement('a');
+    link.href = attachment.downloadUrl;
+    link.download = attachment.filename;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  private openAttachment(attachment: ChatDocumentAttachment): void {
+    if (attachment.contentType !== 'application/pdf') {
+      return;
+    }
+    window.open(attachment.downloadUrl, '_blank', 'noopener');
+  }
+
+  private absoluteArtifactUrl(downloadUrl: string): string {
+    return downloadUrl.startsWith('http') ? downloadUrl : `${this.apiOrigin}${downloadUrl}`;
   }
 
   private playTone(frequency: number, duration: number): void {

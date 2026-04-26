@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.136.1",
     "httpx>=0.28.1",
     "openai>=2.32.0",
+    "reportlab>=4.4.10",
     "supabase>=2.29.0",
     "uvicorn>=0.46.0",
 ]

@@ -1,18 +1,20 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from data_access.chat_repository import ChatRepository, ChatRepositoryError
 from data_access.legal_case_repository import LegalCaseRepository, LegalCaseRepositoryError
 from data_access.openai_chat_client import OpenAIChatClient
 from data_access.trace_repository import TraceRepository
 from schemas.chat import ChatPersistedMessageResponse, ChatRequest, ChatSessionCreateRequest, ChatSessionResponse
+from services.chat_agent_service import ChatAgentService
 from services.chat_service import ChatService
 from services.chat_tool_registry import ChatToolRegistry
 from services.internal_contact_service import InternalContactService
 from services.legal_data_hub_service import LegalDataHubService
 from services.legal_case_service import LegalCaseService
+from services.legal_document_service import LegalDocumentService
 from services.trace_service import TraceService
 from supabase_client import SupabaseConfigurationError
 
@@ -23,6 +25,7 @@ router = APIRouter()
 def get_chat_service() -> ChatService:
     case_repository = LegalCaseRepository()
     trace_repository = TraceRepository()
+    openai_client = OpenAIChatClient()
     legal_case_service = LegalCaseService(repository=case_repository)
     trace_service = TraceService(
         case_repository=case_repository,
@@ -38,9 +41,16 @@ def get_chat_service() -> ChatService:
         legal_data_hub_service=legal_data_hub_service,
         internal_contact_service=InternalContactService(),
         external_contact_service=InternalContactService(chat_id_environment_key="TELEGRAM_EXTERNAL_CHAT_ID"),
+        legal_document_service=LegalDocumentService(),
+    )
+    tool_registry.set_chat_agent_service(
+        ChatAgentService(
+            openai_client=openai_client,
+            tool_provider=tool_registry,
+        )
     )
     return ChatService(
-        openai_client=OpenAIChatClient(),
+        openai_client=openai_client,
         tool_registry=tool_registry,
         chat_repository=ChatRepository(),
         case_repository=case_repository,
@@ -109,4 +119,18 @@ def stream_chat(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@router.get("/chat-artifacts/{artifact_id}")
+def download_chat_artifact(artifact_id: UUID) -> FileResponse:
+    try:
+        artifact = LegalDocumentService().get_artifact(artifact_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Generated document not found") from exc
+
+    return FileResponse(
+        artifact["path"],
+        media_type=artifact["contentType"],
+        filename=artifact["filename"],
     )

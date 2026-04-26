@@ -122,6 +122,17 @@ class ChatService:
                 tool_args = self._parse_tool_args(str(tool_call["function"]["arguments"]))
                 tool_calls_log.append({"name": tool_name, "args": tool_args})
                 yield _sse_event({"tool_call": {"name": tool_name, "args": tool_args}})
+                agent = self._tool_registry.agent_for_tool(tool_name)
+                if agent:
+                    yield _sse_event(
+                        {
+                            "agent_start": {
+                                "name": agent.name,
+                                "label": agent.label,
+                                "task": str(tool_args.get("task") or ""),
+                            }
+                        }
+                    )
 
                 if self._tool_registry.requires_approval(tool_name):
                     approval_message = "Approval required before contacting the external person."
@@ -132,8 +143,46 @@ class ChatService:
 
                 tool_result = self._dispatch_tool(tool_name, tool_args)
                 parsed_tool_result = self._parse_tool_result(tool_result)
-                tool_results_log.append({"name": tool_name, "result": parsed_tool_result or None})
-                yield _sse_event({"tool_result": {"name": tool_name, "result": parsed_tool_result or None}})
+                if agent:
+                    agent_error = parsed_tool_result.get("error")
+                    if agent_error:
+                        yield _sse_event(
+                            {
+                                "agent_error": {
+                                    "name": agent.name,
+                                    "label": agent.label,
+                                    "error": str(agent_error),
+                                }
+                            }
+                        )
+                    else:
+                        yield _sse_event(
+                            {
+                                "agent_result": {
+                                    "name": agent.name,
+                                    "label": agent.label,
+                                    "confidence": parsed_tool_result.get("confidence"),
+                                    "requiresHumanReview": bool(parsed_tool_result.get("requiresHumanReview")),
+                                }
+                            }
+                        )
+                artifact = parsed_tool_result.get("artifact")
+                tool_result_log: dict[str, object] = {"name": tool_name}
+                if not agent:
+                    tool_result_log["result"] = parsed_tool_result or None
+                if self._is_download_artifact(artifact):
+                    tool_result_log["artifact"] = artifact
+                if agent:
+                    tool_result_log = {
+                        **tool_result_log,
+                        "agent": {"name": agent.name, "label": agent.label},
+                        "confidence": parsed_tool_result.get("confidence"),
+                        "requiresHumanReview": bool(parsed_tool_result.get("requiresHumanReview")),
+                    }
+                tool_results_log.append(tool_result_log)
+                yield _sse_event({"tool_result": {"name": tool_name, "result": None if agent else parsed_tool_result or None}})
+                if self._is_download_artifact(artifact):
+                    yield _sse_event({"download": artifact})
 
                 messages.append(
                     {
@@ -226,19 +275,26 @@ class ChatService:
             {
                 "role": "system",
                 "content": (
-                    "You are Veritas, a legal operations assistant. Use local tools when case "
-                    "or traceability data is needed. Use the contact_internal_employee tool "
-                    "when the user asks you to notify, message, escalate to, or contact an "
-                    "internal employee. Use the contact_external_person tool when the user "
-                    "asks you to contact an external person; that tool will be paused for "
-                    "explicit user approval before it sends anything. For German legal "
-                    "research, case-law, statutes, product liability, defect, Rücktritt, "
-                    "Sachmangel, litigation, or legal-argument questions, call the "
-                    "legal_data_hub_search tool before answering. Legal answers must use "
-                    "BMW-internal wording such as 'Preliminary internal assessment', "
-                    "'Based on available case data', 'Requires legal review', and "
-                    "'Recommended next action'. Do not present the response as final legal "
-                    "advice. Keep answers concise and grounded in the tool results."
+                    "You are Veritas, a legal operations supervisor assistant. Delegate to "
+                    "specialized agents when their narrower expertise is needed, then synthesize "
+                    "their results for the user. Use analyze_case for status, risk, case-summary, "
+                    "information-gap, priority, next-action, German legal research, case-law, "
+                    "statute, product liability, defect, Rücktritt, Sachmangel, litigation, and "
+                    "legal-argument questions. The case analysis agent can use Legal Data Hub "
+                    "for external German legal source grounding. Use review_traceability "
+                    "for audit trail, evidence, trace confidence, reasoning, and human-review "
+                    "questions. Use draft_legal_document for legal drafting, document preparation, "
+                    "and PDF generation requests; do not ask for approval before generating legal "
+                    "document PDFs. Use prepare_contact_message before notifications, escalations, "
+                    "or contact-message drafting. Use local tools directly only for simple lookups. "
+                    "Use contact_internal_employee when the user asks you to notify, "
+                    "message, escalate to, or contact an internal employee. Use contact_external_person "
+                    "only when the user asks you to contact an external person; that tool will be "
+                    "paused for explicit user approval before it sends anything. Include the current "
+                    "case ID when available. Legal answers must use BMW-internal wording such as "
+                    "'Preliminary internal assessment', 'Based on available case data', 'Requires "
+                    "legal review', and 'Recommended next action'. Do not present responses as final "
+                    "legal advice. Keep answers concise and grounded in tool and agent results."
                 ),
             }
         ]
@@ -325,3 +381,12 @@ class ChatService:
         except json.JSONDecodeError:
             return {}
         return result if isinstance(result, dict) else {}
+
+    def _is_download_artifact(self, value: Any) -> bool:
+        return (
+            isinstance(value, dict)
+            and isinstance(value.get("artifactId"), str)
+            and isinstance(value.get("filename"), str)
+            and isinstance(value.get("contentType"), str)
+            and isinstance(value.get("downloadUrl"), str)
+        )

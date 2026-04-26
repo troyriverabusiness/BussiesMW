@@ -229,6 +229,41 @@
                   </article>
                 }
                 <article
+                  *ngFor="let activity of message.agentActivities"
+                  class="tool-call-card agent-call-card"
+                  [class.complete]="activity.status === 'completed'"
+                  [class.live]="activity.status === 'running'"
+                  [class.error]="activity.status === 'error'"
+                >
+                  <div class="message-status">
+                    <span class="tool-icon material-symbols-rounded" aria-hidden="true">
+                      {{ agentActivityIcon(activity) }}
+                    </span>
+                    <span>{{ agentActivityStatusLabel(activity) }}</span>
+                    <span class="tool-state material-symbols-rounded" aria-hidden="true">
+                      {{
+                        activity.status === 'completed'
+                          ? 'check_circle'
+                          : activity.status === 'error'
+                            ? 'error'
+                            : 'progress_activity'
+                      }}
+                    </span>
+                  </div>
+                  @if (activity.task) {
+                    <div class="tool-approval-preview">
+                      <span>Task</span>
+                      <p>{{ activity.task }}</p>
+                    </div>
+                  }
+                  @if (activity.error) {
+                    <div class="tool-approval-preview">
+                      <span>Error</span>
+                      <p>{{ activity.error }}</p>
+                    </div>
+                  }
+                </article>
+                <article
                   *ngFor="let activity of message.activities"
                   class="tool-call-card"
                   [class.complete]="activity.status === 'completed'"
@@ -272,6 +307,23 @@
                     @if (legalDataHubSources(message).length) {
                       <app-legal-source-list [sources]="legalDataHubSources(message)"></app-legal-source-list>
                     }
+                  </article>
+                }
+                @if (message.attachments?.length) {
+                  <article class="message document-message">
+                    <strong>Generated documents</strong>
+                    <a
+                      *ngFor="let attachment of message.attachments"
+                      class="document-download"
+                      [href]="attachment.downloadUrl"
+                      [attr.download]="attachment.filename"
+                    >
+                      <span class="material-symbols-rounded" aria-hidden="true">picture_as_pdf</span>
+                      <span>
+                        {{ attachment.filename }}
+                        <small>{{ attachment.downloaded ? 'Downloaded automatically' : 'Ready to download' }}</small>
+                      </span>
+                    </a>
                   </article>
                 }
               }
