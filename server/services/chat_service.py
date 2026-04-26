@@ -131,8 +131,15 @@ class ChatService:
                     return
 
                 tool_result = self._dispatch_tool(tool_name, tool_args)
-                tool_results_log.append({"name": tool_name})
+                parsed_tool_result = self._parse_tool_result(tool_result)
+                artifact = parsed_tool_result.get("artifact")
+                if isinstance(artifact, dict):
+                    tool_results_log.append({"name": tool_name, "artifact": artifact})
+                else:
+                    tool_results_log.append({"name": tool_name})
                 yield _sse_event({"tool_result": {"name": tool_name}})
+                if isinstance(artifact, dict):
+                    yield _sse_event({"download": artifact})
 
                 messages.append(
                     {
@@ -230,8 +237,12 @@ class ChatService:
                     "when the user asks you to notify, message, escalate to, or contact an "
                     "internal employee. Use the contact_external_person tool when the user "
                     "asks you to contact an external person; that tool will be paused for "
-                    "explicit user approval before it sends anything. Keep answers concise "
-                    "and grounded in the tool results."
+                    "explicit user approval before it sends anything. Use the "
+                    "generate_legal_document_pdf tool when the user asks you to draft, create, "
+                    "generate, download, prepare, or produce a legal document such as a court "
+                    "order, contract, agreement, notice, letter, or filing. Draft complete, "
+                    "formal sections for the tool arguments; include the current case ID when "
+                    "available. Keep answers concise and grounded in the tool results."
                 ),
             }
         ]

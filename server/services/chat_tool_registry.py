@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from services.internal_contact_service import InternalContactService
 from services.legal_case_service import LegalCaseService
+from services.legal_document_service import LegalDocumentService
 from services.trace_service import TraceService
 
 
@@ -30,11 +31,13 @@ class ChatToolRegistry:
         trace_service: TraceService,
         internal_contact_service: InternalContactService,
         external_contact_service: InternalContactService,
+        legal_document_service: LegalDocumentService,
     ) -> None:
         self._legal_case_service = legal_case_service
         self._trace_service = trace_service
         self._internal_contact_service = internal_contact_service
         self._external_contact_service = external_contact_service
+        self._legal_document_service = legal_document_service
         self._approval_required_tools = {"contact_external_person"}
         self._handlers: dict[str, ToolHandler] = {
             "list_cases": self._list_cases,
@@ -42,6 +45,7 @@ class ChatToolRegistry:
             "list_case_traces": self._list_case_traces,
             "contact_internal_employee": self._contact_internal_employee,
             "contact_external_person": self._contact_external_person,
+            "generate_legal_document_pdf": self._generate_legal_document_pdf,
         }
 
     @property
@@ -132,6 +136,74 @@ class ChatToolRegistry:
                     },
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "generate_legal_document_pdf",
+                    "description": (
+                        "Generate a professional PDF for a requested legal document, such as a court order, "
+                        "contract, agreement, letter, notice, or filing draft. Use this when the user asks to "
+                        "create, draft, generate, download, or prepare a legal document as a PDF."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "documentType": {
+                                "type": "string",
+                                "description": "The legal document category, for example Court Order or Service Agreement.",
+                            },
+                            "title": {
+                                "type": "string",
+                                "description": "Formal title to display at the top of the document.",
+                            },
+                            "caseId": {
+                                "type": "string",
+                                "description": "Current case UUID, when the document relates to a case.",
+                            },
+                            "court": {
+                                "type": "string",
+                                "description": "Court, tribunal, authority, or recipient organization, when relevant.",
+                            },
+                            "recipient": {
+                                "type": "string",
+                                "description": "Person or organization receiving the document, when relevant.",
+                            },
+                            "jurisdiction": {
+                                "type": "string",
+                                "description": "Applicable jurisdiction or governing law, when known.",
+                            },
+                            "reference": {
+                                "type": "string",
+                                "description": "Matter, filing, claim, or contract reference, when known.",
+                            },
+                            "parties": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Parties named in the document.",
+                            },
+                            "sections": {
+                                "type": "array",
+                                "description": "Ordered formal sections containing the drafted legal text.",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "heading": {"type": "string"},
+                                        "body": {"type": "string"},
+                                        "pageBreakBefore": {"type": "boolean"},
+                                    },
+                                    "required": ["heading", "body"],
+                                },
+                            },
+                            "signatureBlocks": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Signature or approval labels to include at the end of the document.",
+                            },
+                        },
+                        "required": ["documentType", "title", "sections"],
+                    },
+                },
+            },
         ]
 
     def requires_approval(self, name: str) -> bool:
@@ -166,6 +238,9 @@ class ChatToolRegistry:
     def _contact_external_person(self, args: dict[str, Any]) -> dict[str, Any]:
         message = str(args.get("message") or "").strip()
         return self._external_contact_service.send_message(message)
+
+    def _generate_legal_document_pdf(self, args: dict[str, Any]) -> dict[str, Any]:
+        return self._legal_document_service.generate_document(args)
 
     def _parse_case_id(self, args: dict[str, Any]) -> UUID:
         case_id = args.get("case_id") or args.get("caseId")

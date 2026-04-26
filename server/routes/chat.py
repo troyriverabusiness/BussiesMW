@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from data_access.chat_repository import ChatRepository, ChatRepositoryError
 from data_access.legal_case_repository import LegalCaseRepository, LegalCaseRepositoryError
@@ -12,6 +12,7 @@ from services.chat_service import ChatService
 from services.chat_tool_registry import ChatToolRegistry
 from services.internal_contact_service import InternalContactService
 from services.legal_case_service import LegalCaseService
+from services.legal_document_service import LegalDocumentService
 from services.trace_service import TraceService
 from supabase_client import SupabaseConfigurationError
 
@@ -31,6 +32,7 @@ def get_chat_service() -> ChatService:
         trace_service=trace_service,
         internal_contact_service=InternalContactService(),
         external_contact_service=InternalContactService(chat_id_environment_key="TELEGRAM_EXTERNAL_CHAT_ID"),
+        legal_document_service=LegalDocumentService(),
     )
     return ChatService(
         openai_client=OpenAIChatClient(),
@@ -102,4 +104,18 @@ def stream_chat(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@router.get("/chat-artifacts/{artifact_id}")
+def download_chat_artifact(artifact_id: UUID) -> FileResponse:
+    try:
+        artifact = LegalDocumentService().get_artifact(artifact_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Generated document not found") from exc
+
+    return FileResponse(
+        artifact["path"],
+        media_type=artifact["contentType"],
+        filename=artifact["filename"],
     )

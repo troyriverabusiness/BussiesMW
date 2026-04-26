@@ -36,6 +36,7 @@ interface ChatMessage {
   text: string;
   status?: ChatMessageStatus;
   activities?: ChatActivity[];
+  attachments?: ChatDocumentAttachment[];
   createdAt?: string;
 }
 
@@ -70,6 +71,7 @@ interface PersistedToolCall {
 
 interface PersistedToolResult {
   name: string;
+  artifact?: ChatDocumentAttachment;
 }
 
 type ChatMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' | 'error';
@@ -78,6 +80,15 @@ interface ChatActivity {
   name: string;
   args?: Record<string, unknown>;
   status: 'running' | 'completed' | 'approval-required' | 'denied';
+}
+
+interface ChatDocumentAttachment {
+  artifactId: string;
+  filename: string;
+  contentType: string;
+  downloadUrl: string;
+  description?: string;
+  downloaded?: boolean;
 }
 
 interface ApprovedToolCall {
@@ -97,6 +108,7 @@ interface ChatStreamEvent {
   tool_result?: {
     name: string;
   };
+  download?: ChatDocumentAttachment;
   approval_required?: {
     name: string;
     args: Record<string, unknown>;
@@ -280,6 +292,7 @@ export class CaseWorkspaceComponent implements OnInit {
                 createdAt: message.createdAt,
                 status: message.role === 'assistant' ? 'complete' : undefined,
                 activities: activities.length ? activities : undefined,
+                attachments: this.persistedToolAttachments(message),
               };
             }),
           );
@@ -572,6 +585,7 @@ export class CaseWorkspaceComponent implements OnInit {
       list_case_traces: 'Trace lookup',
       contact_internal_employee: 'Contact internal employee',
       contact_external_person: 'Contact external person',
+      generate_legal_document_pdf: 'Generate legal PDF',
     };
     return labels[activity.name] ?? this.toTitleCase(activity.name.replace(/^get_/, '').replace(/_/g, ' '));
   }
@@ -583,6 +597,7 @@ export class CaseWorkspaceComponent implements OnInit {
       list_case_traces: 'timeline',
       contact_internal_employee: 'mail',
       contact_external_person: 'outgoing_mail',
+      generate_legal_document_pdf: 'contract',
     };
     return icons[activity.name] ?? 'construction';
   }
@@ -709,6 +724,9 @@ export class CaseWorkspaceComponent implements OnInit {
     if (streamEvent.tool_result) {
       this.completeToolCall(streamEvent.tool_result.name);
     }
+    if (streamEvent.download) {
+      this.recordDownload(streamEvent.download);
+    }
     if (streamEvent.approval_required) {
       this.markApprovalRequired(streamEvent.approval_required);
     }
@@ -776,6 +794,23 @@ export class CaseWorkspaceComponent implements OnInit {
       }
       return nextMessages;
     });
+  }
+
+  private recordDownload(attachment: ChatDocumentAttachment): void {
+    const downloadUrl = this.absoluteArtifactUrl(attachment.downloadUrl);
+    const downloadableAttachment = { ...attachment, downloadUrl, downloaded: true };
+    this.messages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          attachments: [...(lastMessage.attachments ?? []), downloadableAttachment],
+        };
+      }
+      return nextMessages;
+    });
+    this.triggerDownload(downloadableAttachment);
   }
 
   private markActivityStatus(activityToUpdate: ChatActivity, status: ChatActivity['status']): void {
@@ -873,8 +908,55 @@ export class CaseWorkspaceComponent implements OnInit {
       if (!this.isRecord(item) || typeof item['name'] !== 'string') {
         return [];
       }
-      return [{ name: item['name'] }];
+      const artifact = this.asDocumentAttachment(item['artifact']);
+      return [{ name: item['name'], artifact }];
     });
+  }
+
+  private persistedToolAttachments(message: PersistedChatMessage): ChatDocumentAttachment[] | undefined {
+    if (message.role !== 'assistant') {
+      return undefined;
+    }
+
+    const attachments = this.asPersistedToolResults(message.toolResults)
+      .flatMap((result) => (result.artifact ? [result.artifact] : []))
+      .map((attachment) => ({ ...attachment, downloadUrl: this.absoluteArtifactUrl(attachment.downloadUrl) }));
+    return attachments.length ? attachments : undefined;
+  }
+
+  private asDocumentAttachment(value: unknown): ChatDocumentAttachment | undefined {
+    if (
+      !this.isRecord(value) ||
+      typeof value['artifactId'] !== 'string' ||
+      typeof value['filename'] !== 'string' ||
+      typeof value['contentType'] !== 'string' ||
+      typeof value['downloadUrl'] !== 'string'
+    ) {
+      return undefined;
+    }
+
+    return {
+      artifactId: value['artifactId'],
+      filename: value['filename'],
+      contentType: value['contentType'],
+      downloadUrl: value['downloadUrl'],
+      description: typeof value['description'] === 'string' ? value['description'] : undefined,
+      downloaded: typeof value['downloaded'] === 'boolean' ? value['downloaded'] : undefined,
+    };
+  }
+
+  private triggerDownload(attachment: ChatDocumentAttachment): void {
+    const link = document.createElement('a');
+    link.href = attachment.downloadUrl;
+    link.download = attachment.filename;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  private absoluteArtifactUrl(downloadUrl: string): string {
+    return downloadUrl.startsWith('http') ? downloadUrl : `${this.apiOrigin}${downloadUrl}`;
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

@@ -45,6 +45,7 @@ interface VeritasMessage {
   caseId?: string;
   status?: VeritasMessageStatus;
   activities?: VeritasActivity[];
+  attachments?: ChatDocumentAttachment[];
 }
 
 interface ChatHistoryMessage {
@@ -58,6 +59,15 @@ interface VeritasActivity {
   name: string;
   args?: Record<string, unknown>;
   status: 'running' | 'completed' | 'approval-required' | 'denied';
+}
+
+interface ChatDocumentAttachment {
+  artifactId: string;
+  filename: string;
+  contentType: string;
+  downloadUrl: string;
+  description?: string;
+  downloaded?: boolean;
 }
 
 interface ApprovedToolCall {
@@ -74,6 +84,7 @@ interface ChatStreamEvent {
   tool_result?: {
     name: string;
   };
+  download?: ChatDocumentAttachment;
   approval_required?: {
     name: string;
     args: Record<string, unknown>;
@@ -358,6 +369,7 @@ export class DashboardComponent implements OnInit {
       list_case_traces: 'Trace lookup',
       contact_internal_employee: 'Contact internal employee',
       contact_external_person: 'Contact external person',
+      generate_legal_document_pdf: 'Generate legal PDF',
     };
     return labels[activity.name] ?? this.toTitleCase(activity.name.replace(/^get_/, '').replace(/_/g, ' '));
   }
@@ -369,6 +381,7 @@ export class DashboardComponent implements OnInit {
       list_case_traces: 'timeline',
       contact_internal_employee: 'mail',
       contact_external_person: 'outgoing_mail',
+      generate_legal_document_pdf: 'contract',
     };
     return icons[activity.name] ?? 'construction';
   }
@@ -437,6 +450,9 @@ export class DashboardComponent implements OnInit {
     }
     if (event.tool_result) {
       this.completeToolCall(event.tool_result.name);
+    }
+    if (event.download) {
+      this.recordDownload(event.download);
     }
     if (event.approval_required) {
       this.markApprovalRequired(event.approval_required);
@@ -522,6 +538,23 @@ export class DashboardComponent implements OnInit {
       }
       return nextMessages;
     });
+  }
+
+  private recordDownload(attachment: ChatDocumentAttachment): void {
+    const downloadUrl = this.absoluteArtifactUrl(attachment.downloadUrl);
+    const downloadableAttachment = { ...attachment, downloadUrl, downloaded: true };
+    this.veritasMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          attachments: [...(lastMessage.attachments ?? []), downloadableAttachment],
+        };
+      }
+      return nextMessages;
+    });
+    this.triggerDownload(downloadableAttachment);
   }
 
   private markActivityStatus(activityToUpdate: VeritasActivity, status: VeritasActivity['status']): void {
@@ -624,6 +657,20 @@ export class DashboardComponent implements OnInit {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  private triggerDownload(attachment: ChatDocumentAttachment): void {
+    const link = document.createElement('a');
+    link.href = attachment.downloadUrl;
+    link.download = attachment.filename;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  private absoluteArtifactUrl(downloadUrl: string): string {
+    return downloadUrl.startsWith('http') ? downloadUrl : `${this.apiOrigin}${downloadUrl}`;
   }
 
   private playTone(frequency: number, duration: number): void {
