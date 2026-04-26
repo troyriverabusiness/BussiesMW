@@ -1,0 +1,245 @@
+<section class="trace-json-viewer" [attr.aria-label]="title">
+  <header class="viewer-header">
+    <div>
+      <p>Review evidence</p>
+      <h3>{{ title }}</h3>
+    </div>
+  </header>
+
+  <div class="viewer-body">
+    @if (hasKnownSections()) {
+      @if (rawEmail(); as email) {
+        <article class="legal-card email-card">
+          <div class="card-title">
+            <span class="material-symbols-rounded" aria-hidden="true">mail</span>
+            <div>
+              <p>Intake email</p>
+              <h4>{{ email.subject }}</h4>
+            </div>
+          </div>
+          <dl class="metadata-grid">
+            <div>
+              <dt>From</dt>
+              <dd>{{ email.from }}</dd>
+            </div>
+            <div>
+              <dt>Received at</dt>
+              <dd>{{ email.receivedAt }}</dd>
+            </div>
+          </dl>
+          <p class="technical-text">Message ID: {{ email.messageId }}</p>
+          <div class="email-body">{{ email.body }}</div>
+        </article>
+      }
+
+      @if (issueOutput(); as issue) {
+        <article class="legal-card">
+          <div class="card-title">
+            <span class="material-symbols-rounded" aria-hidden="true">fact_check</span>
+            <div>
+              <p>Issue extraction output</p>
+              <h4>Information review</h4>
+            </div>
+          </div>
+
+          <div class="issue-layout">
+            <section class="check-panel present-panel">
+              <h5>Present Information</h5>
+              <ul>
+                @for (item of listItems(issue, 'present'); track item) {
+                  <li>
+                    <span class="material-symbols-rounded" aria-hidden="true">check_circle</span>
+                    <span>{{ item }}</span>
+                  </li>
+                } @empty {
+                  <li class="empty-row">No present information recorded.</li>
+                }
+              </ul>
+            </section>
+
+            <section class="check-panel warning-panel">
+              <h5>Missing Information</h5>
+              <ul>
+                @for (item of listItems(issue, 'missing'); track item) {
+                  <li>
+                    <span class="material-symbols-rounded" aria-hidden="true">error</span>
+                    <span>{{ item }}</span>
+                  </li>
+                } @empty {
+                  <li class="empty-row">No missing information recorded.</li>
+                }
+              </ul>
+            </section>
+
+            <section class="check-panel neutral-panel">
+              <h5>Ambiguous Information</h5>
+              <ul>
+                @for (item of listItems(issue, 'ambiguous'); track item) {
+                  <li>
+                    <span class="material-symbols-rounded" aria-hidden="true">help</span>
+                    <span>{{ item }}</span>
+                  </li>
+                } @empty {
+                  <li class="empty-row">No ambiguous information recorded.</li>
+                }
+              </ul>
+            </section>
+          </div>
+
+          @if (sopFlags(issue).length) {
+            <div class="chip-row" aria-label="SOP flags">
+              @for (flag of sopFlags(issue); track flag) {
+                <span>{{ flag }}</span>
+              }
+            </div>
+          }
+
+          @if (issueCaseFieldRows(issue).length) {
+            <section class="detail-section">
+              <h5>Case Fields</h5>
+              <dl class="kv-list">
+                @for (row of issueCaseFieldRows(issue); track row.label) {
+                  <div>
+                    <dt>{{ row.label }}</dt>
+                    <dd>{{ row.value }}</dd>
+                  </div>
+                }
+              </dl>
+            </section>
+          }
+
+          <section class="detail-section escalation-section">
+            <div class="section-line">
+              <h5>Escalation</h5>
+              @if (completenessScore(issue) !== null) {
+                <span class="score-badge">{{ completenessScore(issue) }}% complete</span>
+              }
+            </div>
+            @if (completenessScore(issue) !== null) {
+              <div class="score-track" aria-label="Completeness score">
+                <span [style.width.%]="completenessScore(issue)"></span>
+              </div>
+            }
+            <dl class="kv-list">
+              @for (row of escalationRows(issue); track row.label) {
+                <div>
+                  <dt>{{ row.label }}</dt>
+                  <dd>{{ row.value }}</dd>
+                </div>
+              } @empty {
+                <div>
+                  <dt>Escalation</dt>
+                  <dd>No escalation details recorded.</dd>
+                </div>
+              }
+            </dl>
+          </section>
+        </article>
+      }
+
+      @if (departmentValidation(); as validation) {
+        <article class="legal-card">
+          <div class="card-title">
+            <span class="material-symbols-rounded" aria-hidden="true">domain_verification</span>
+            <div>
+              <p>Department validation</p>
+              <h4>Routing and authority check</h4>
+            </div>
+            <span class="status-badge" [ngClass]="validationClass(validation)">
+              {{ validationBadge(validation) }}
+            </span>
+          </div>
+
+          <section class="detail-section">
+            <h5>Validation Result</h5>
+            <p class="reason-text">{{ validationReason(validation) }}</p>
+            @if (validationConcerns(validation).length) {
+              <ul class="concern-list">
+                @for (concern of validationConcerns(validation); track concern) {
+                  <li>{{ concern }}</li>
+                }
+              </ul>
+            }
+          </section>
+
+          <section class="detail-section">
+            <h5>Case Fields</h5>
+            <dl class="kv-list">
+              @for (row of validationCaseFieldRows(validation); track row.label) {
+                <div>
+                  <dt>{{ row.label }}</dt>
+                  <dd>{{ row.value }}</dd>
+                </div>
+              }
+            </dl>
+          </section>
+        </article>
+      }
+    } @else {
+      <article class="legal-card">
+        <ng-container
+          *ngTemplateOutlet="genericNode; context: { $implicit: value, label: title, level: 0 }"
+        ></ng-container>
+      </article>
+    }
+  </div>
+
+</section>
+
+<ng-template #genericNode let-node let-label="label" let-level="level">
+  @if (isRecord(node)) {
+    <details class="tree-group" [open]="level < 1">
+      <summary>
+        <span>{{ label }}</span>
+        <small>{{ preview(node) }}</small>
+      </summary>
+      <div class="tree-children">
+        @for (entry of objectEntries(node); track entry.key) {
+          @if (isPrimitive(entry.value)) {
+            <div class="tree-row">
+              <span>{{ entry.label }}</span>
+              <strong>{{ displayValue(entry.value) }}</strong>
+            </div>
+          } @else {
+            <ng-container
+              *ngTemplateOutlet="
+                genericNode;
+                context: { $implicit: entry.value, label: entry.label, level: level + 1 }
+              "
+            ></ng-container>
+          }
+        }
+      </div>
+    </details>
+  } @else if (isArray(node)) {
+    <details class="tree-group" [open]="level < 1">
+      <summary>
+        <span>{{ label }}</span>
+        <small>{{ preview(node) }}</small>
+      </summary>
+      <ul class="array-list">
+        @for (item of arrayItems(node); track $index) {
+          <li>
+            @if (isPrimitive(item)) {
+              <span>{{ displayValue(item) }}</span>
+            } @else {
+              <ng-container
+                *ngTemplateOutlet="
+                  genericNode;
+                  context: { $implicit: item, label: 'Item ' + ($index + 1), level: level + 1 }
+                "
+              ></ng-container>
+            }
+          </li>
+        } @empty {
+          <li class="empty-row">No items recorded.</li>
+        }
+      </ul>
+    </details>
+  } @else {
+    <div class="tree-row">
+      <span>{{ label }}</span>
+      <strong>{{ displayValue(node) }}</strong>
+    </div>
+  }
+</ng-template>

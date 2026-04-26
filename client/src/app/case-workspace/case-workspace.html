@@ -337,7 +337,22 @@
                 <dl>
                   <div>
                     <dt>Source documents</dt>
-                    <dd>{{ legalCase.sourceDocuments || 'Not specified' }}</dd>
+                    <dd>
+                      <button
+                        class="source-document-toggle"
+                        type="button"
+                        [attr.aria-expanded]="sourceDocumentsOpen()"
+                        (click)="toggleSourceDocuments()"
+                      >
+                        <span class="material-symbols-rounded" aria-hidden="true">description</span>
+                        <span>{{ sourceDocumentsOpen() ? 'Hide documents' : 'View documents' }}</span>
+                      </button>
+                      @if (sourceDocumentsOpen()) {
+                        <div class="source-document-detail">
+                          {{ legalCase.sourceDocuments || 'No source documents specified.' }}
+                        </div>
+                      }
+                    </dd>
                   </div>
                   <div>
                     <dt>Last updated</dt>
@@ -410,9 +425,13 @@
 
                 @if (isTraceExpanded(trace.id)) {
                   <div class="trace-steps">
-                    <article *ngFor="let step of trace.traceSteps" class="trace-step">
+                    <article *ngFor="let step of trace.traceSteps; let stepIndex = index" class="trace-step">
+                      <div class="step-marker" aria-hidden="true">
+                        <span>{{ stepIndex + 1 }}</span>
+                      </div>
                       <div class="step-header">
                         <div>
+                          <small>Step {{ stepIndex + 1 }} of {{ trace.traceSteps.length }}</small>
                           <strong>{{ step.step }}</strong>
                           <small>{{ step.createdAt | date: 'MMM d, y, HH:mm' }}</small>
                         </div>
@@ -422,19 +441,10 @@
                         }
                       </div>
                       <p>{{ step.reasoning }}</p>
-                      <div class="json-grid">
-                        <div>
-                          <h3>Input</h3>
-                          <pre>{{ step.input | json }}</pre>
-                        </div>
-                        <div>
-                          <h3>Output</h3>
-                          <pre>{{ step.output | json }}</pre>
-                        </div>
-                        <div>
-                          <h3>Tool calls</h3>
-                          <pre>{{ step.toolCalls | json }}</pre>
-                        </div>
+                      <div class="trace-json-stack">
+                        <app-trace-json-viewer title="Information reviewed" [data]="step.input"></app-trace-json-viewer>
+                        <app-trace-json-viewer title="Agent conclusion" [data]="step.output"></app-trace-json-viewer>
+                        <app-trace-json-viewer title="Workspace checks" [data]="step.toolCalls"></app-trace-json-viewer>
                       </div>
                     </article>
                   </div>
@@ -477,8 +487,8 @@
                   <section>
                     <h3>Important details</h3>
                     <p>{{ reviewStep.reasoning }}</p>
-                    <pre>{{ reviewStep.output | json }}</pre>
-                    <pre>{{ reviewStep.toolCalls | json }}</pre>
+                    <app-trace-json-viewer title="Agent conclusion" [data]="reviewStep.output"></app-trace-json-viewer>
+                    <app-trace-json-viewer title="Workspace checks" [data]="reviewStep.toolCalls"></app-trace-json-viewer>
                   </section>
                 }
 

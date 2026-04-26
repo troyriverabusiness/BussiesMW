@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
+import { TraceJsonViewerComponent } from '../trace-json-viewer/trace-json-viewer.component';
 
 type LegalCaseStatus = 'Open' | 'Closed' | 'Action Required' | 'Awaiting Counterparty' | 'Awaiting Internal';
 type PriorityRiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
@@ -136,7 +137,7 @@ interface Trace {
 
 @Component({
   selector: 'app-case-workspace',
-  imports: [CommonModule, CurrencyPipe, DatePipe, RouterLink],
+  imports: [CommonModule, CurrencyPipe, DatePipe, RouterLink, TraceJsonViewerComponent],
   templateUrl: './case-workspace.html',
   styleUrl: './case-workspace.scss',
 })
@@ -168,6 +169,7 @@ export class CaseWorkspaceComponent implements OnInit {
   readonly traceabilityLoading = signal(false);
   readonly traceabilityError = signal('');
   readonly expandedTraceIds = signal<Set<string>>(new Set());
+  readonly sourceDocumentsOpen = signal(false);
   readonly selectedReviewTrace = signal<Trace | null>(null);
   readonly selectedReviewStep = signal<TraceStep | null>(null);
   readonly reviewDecision = signal('Approve');
@@ -226,6 +228,10 @@ export class CaseWorkspaceComponent implements OnInit {
 
   restoreOverview(): void {
     this.overviewHidden.set(false);
+  }
+
+  toggleSourceDocuments(): void {
+    this.sourceDocumentsOpen.update((isOpen) => !isOpen);
   }
 
   setChatDraft(message: string): void {
