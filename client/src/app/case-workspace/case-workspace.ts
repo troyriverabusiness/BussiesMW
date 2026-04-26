@@ -309,7 +309,7 @@ export class CaseWorkspaceComponent implements OnInit {
         sessionId,
         messages: history,
       });
-      this.ensureAssistantMessageText('Toto did not return a response.');
+      this.ensureAssistantMessageText('Veritas did not return a response.');
       this.setLastAssistantStatus('complete');
       this.loadChatSessions({ preserveActiveSession: true });
     } catch (error) {
@@ -341,7 +341,7 @@ export class CaseWorkspaceComponent implements OnInit {
         messages: history,
         approvedToolCall: { name: activity.name, args: activity.args ?? {} },
       });
-      this.ensureAssistantMessageText('Toto did not return a response.');
+      this.ensureAssistantMessageText('Veritas did not return a response.');
       this.setLastAssistantStatus('complete');
       this.loadChatSessions({ preserveActiveSession: true });
     } catch (error) {
@@ -814,8 +814,8 @@ export class CaseWorkspaceComponent implements OnInit {
   private chatFailureMessage(error: unknown): string {
     const detail = error instanceof Error ? error.message.trim() : '';
     return detail
-      ? `Toto could not reach the AI chat service. Server error: ${detail}`
-      : 'Toto could not reach the AI chat service. Please try again.';
+      ? `Veritas could not reach the AI chat service. Server error: ${detail}`
+      : 'Veritas could not reach the AI chat service. Please try again.';
   }
 
   private updateLastAssistantMessage(updateText: (currentText: string) => string): void {

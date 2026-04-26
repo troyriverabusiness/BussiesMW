@@ -6,7 +6,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "client": {
+    "veritas-client": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -64,10 +64,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "client:build:production"
+              "buildTarget": "veritas-client:build:production"
             },
             "development": {
-              "buildTarget": "client:build:development"
+              "buildTarget": "veritas-client:build:development"
             }
           },
           "defaultConfiguration": "development"

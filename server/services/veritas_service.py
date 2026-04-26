@@ -1,5 +1,5 @@
 from data_access.legal_case_repository import LegalCaseRepository
-from schemas.toto import TotoChatRequest, TotoChatResponse
+from schemas.veritas import VeritasChatRequest, VeritasChatResponse
 
 
 def _format_case_text(value: object, fallback: str) -> str:
@@ -14,15 +14,15 @@ def _format_case_text(value: object, fallback: str) -> str:
     return fallback
 
 
-class TotoService:
+class VeritasService:
     def __init__(self, repository: LegalCaseRepository) -> None:
         self._repository = repository
 
-    def get_case_update(self, payload: TotoChatRequest) -> TotoChatResponse:
+    def get_case_update(self, payload: VeritasChatRequest) -> VeritasChatResponse:
         if payload.case_id:
             legal_case = self._repository.get_by_id(payload.case_id)
             if legal_case is None:
-                return TotoChatResponse(
+                return VeritasChatResponse(
                     status="Case not found",
                     lastCorrespondence="No case record was available for the provided identifier.",
                     waitingFor="Verify the case link and try again.",
@@ -42,7 +42,7 @@ class TotoService:
                 title,
             )
 
-            return TotoChatResponse(
+            return VeritasChatResponse(
                 status=status,
                 lastCorrespondence=str(
                     legal_case.get("source_documents")
@@ -56,12 +56,12 @@ class TotoService:
                 ),
             )
 
-        return TotoChatResponse(
+        return VeritasChatResponse(
             status="Action Required",
             lastCorrespondence="Legal operations received a new intake note from the business owner.",
             waitingFor="Matter owner assignment and initial risk triage.",
             summary=(
-                "Toto can prepare a concise update once a case is selected. "
+                "Veritas can prepare a concise update once a case is selected. "
                 "For now, the request appears to need ownership, status confirmation, and next-step routing."
             ),
         )

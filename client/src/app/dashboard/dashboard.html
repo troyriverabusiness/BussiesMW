@@ -1,9 +1,9 @@
 <main class="dashboard-shell">
   <header class="topbar" aria-label="Primary">
-    <a class="brand" href="/" aria-label="Bussies legal dashboard home">
-      <span class="brand-mark" aria-hidden="true">B</span>
+    <a class="brand" href="/" aria-label="Veritas legal dashboard home">
+      <span class="brand-mark" aria-hidden="true">V</span>
       <span>
-        <strong>Bussies</strong>
+        <strong>Veritas</strong>
         <small>Multi-agent legal orchestration</small>
       </span>
     </a>
@@ -34,15 +34,15 @@
 
       <div class="toolbar-actions">
         <button
-          class="toto-toggle"
+          class="veritas-toggle"
           type="button"
           title="Quick update chatbot for any case"
-          [attr.aria-expanded]="totoOpen()"
-          aria-controls="toto-panel"
-          (click)="toggleToto()"
+          [attr.aria-expanded]="veritasOpen()"
+          aria-controls="veritas-panel"
+          (click)="toggleVeritas()"
         >
           <span class="material-symbols-rounded" aria-hidden="true">forum</span>
-          <span>Toto</span>
+          <span>Veritas</span>
         </button>
 
         <button
@@ -112,7 +112,7 @@
               <th scope="col" class="summary-column">Issue summary</th>
               <th scope="col" class="status-column">Status</th>
               <th scope="col" class="updated-column">Last updated</th>
-              <th scope="col" class="action-column">Toto</th>
+              <th scope="col" class="action-column">Veritas</th>
             </tr>
           </thead>
           <tbody>
@@ -150,10 +150,10 @@
               <td class="updated-column">{{ legalCase.lastUpdated | date: 'MMM d, y, HH:mm' }}</td>
               <td class="action-column">
                 <button
-                  class="row-toto-button"
+                  class="row-veritas-button"
                   type="button"
-                  title="Update with Toto"
-                  aria-label="Update with Toto"
+                  title="Update with Veritas"
+                  aria-label="Update with Veritas"
                   (click)="requestCaseUpdate(legalCase, $event)"
                 >
                   <span class="material-symbols-rounded" aria-hidden="true">chat</span>
@@ -180,41 +180,41 @@
     }
   </section>
 
-  <footer class="footer">Copyright © 2026 Bussies</footer>
+  <footer class="footer">Copyright © 2026 Veritas</footer>
 </main>
 
-@if (totoOpen()) {
-  <aside id="toto-panel" class="toto-panel" aria-label="Toto quick case-update chatbot">
-    <div class="toto-header">
+@if (veritasOpen()) {
+  <aside id="veritas-panel" class="veritas-panel" aria-label="Veritas quick case-update chatbot">
+    <div class="veritas-header">
       <div>
-        <span class="assistant-mark" aria-hidden="true">T</span>
+        <span class="assistant-mark" aria-hidden="true">V</span>
         <div>
-          <strong>Toto</strong>
+          <strong>Veritas</strong>
           <span>Quick case-update assistant</span>
         </div>
       </div>
-      <div class="toto-window-actions">
-        <button type="button" class="sound-toggle" (click)="toggleTotoMute()">
+      <div class="veritas-window-actions">
+        <button type="button" class="sound-toggle" (click)="toggleVeritasMute()">
           <span class="material-symbols-rounded" aria-hidden="true">
-            {{ totoMuted() ? 'volume_off' : 'volume_up' }}
+            {{ veritasMuted() ? 'volume_off' : 'volume_up' }}
           </span>
-          <span>{{ totoMuted() ? 'Muted' : 'Sound on' }}</span>
+          <span>{{ veritasMuted() ? 'Muted' : 'Sound on' }}</span>
         </button>
-        <button type="button" class="close-toto" aria-label="Close Toto" (click)="toggleToto()">
+        <button type="button" class="close-veritas" aria-label="Close Veritas" (click)="toggleVeritas()">
           <span class="material-symbols-rounded" aria-hidden="true">close</span>
         </button>
       </div>
     </div>
 
-    <div class="toto-messages" aria-live="polite">
-      @if (!totoMessages().length && !totoLoading()) {
-        <article class="toto-message">
-          <p>Ask Toto a question or choose a case row to start a live AI chat.</p>
+    <div class="veritas-messages" aria-live="polite">
+      @if (!veritasMessages().length && !veritasLoading()) {
+        <article class="veritas-message">
+          <p>Ask Veritas a question or choose a case row to start a live AI chat.</p>
         </article>
       }
-      <ng-container *ngFor="let message of totoMessages()">
+      <ng-container *ngFor="let message of veritasMessages()">
         @if (message.role === 'user') {
-          <article class="toto-message user">
+          <article class="veritas-message user">
             <p>{{ message.text }}</p>
             @if (message.caseId) {
               <div class="case-reference">
@@ -263,17 +263,17 @@
                 <p>{{ approvalPreview(activity) }}</p>
               </div>
               <div class="tool-approval-actions">
-                <button type="button" (click)="approveExternalContact(activity)" [disabled]="totoLoading()">
+                <button type="button" (click)="approveExternalContact(activity)" [disabled]="veritasLoading()">
                   Approve
                 </button>
-                <button type="button" (click)="denyExternalContact(activity)" [disabled]="totoLoading()">
+                <button type="button" (click)="denyExternalContact(activity)" [disabled]="veritasLoading()">
                   Deny
                 </button>
               </div>
             }
           </article>
           @if (message.text.trim()) {
-            <article class="toto-message">
+            <article class="veritas-message">
               <div class="message-content" [innerHTML]="renderMessageText(message.text)"></div>
             </article>
           }
@@ -281,14 +281,14 @@
       </ng-container>
     </div>
 
-    <form class="toto-input" (submit)="sendTotoDraft($event)">
+    <form class="veritas-input" (submit)="sendVeritasDraft($event)">
       <input
         type="text"
-        placeholder="Ask Toto for a case update"
-        [value]="totoDraft()"
-        (input)="setTotoDraft($any($event.target).value)"
+        placeholder="Ask Veritas for a case update"
+        [value]="veritasDraft()"
+        (input)="setVeritasDraft($any($event.target).value)"
       />
-      <button type="submit" [disabled]="!totoDraft().trim() || totoLoading()">
+      <button type="submit" [disabled]="!veritasDraft().trim() || veritasLoading()">
         <span class="material-symbols-rounded" aria-hidden="true">send</span>
         <span>Send</span>
       </button>

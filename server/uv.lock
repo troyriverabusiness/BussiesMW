@@ -758,7 +758,7 @@ wheels = [
 ]
 
 [[package]]
-name = "server"
+name = "veritas-server"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

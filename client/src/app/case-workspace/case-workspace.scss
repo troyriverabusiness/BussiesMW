@@ -142,7 +142,7 @@
 
 .workspace-sidebar,
 .overview-panel,
-.toto-workspace {
+.agent-workspace {
   min-width: 0;
   overflow: hidden;
 }
@@ -316,7 +316,7 @@
 }
 
 .panel-header,
-.toto-header {
+.agent-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -333,7 +333,7 @@
 }
 
 .panel-header h1,
-.toto-header h2 {
+.agent-header h2 {
   margin: 0;
   color: #18181b;
   font-size: 1.12rem;
@@ -461,7 +461,7 @@
   line-height: 1.5;
 }
 
-.toto-workspace {
+.agent-workspace {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -479,32 +479,32 @@
   box-shadow: 0 8px 20px rgba(24, 24, 27, 0.08);
 }
 
-.toto-header {
+.agent-header {
   min-height: 72px;
   padding: 0 24px;
   border-bottom: 1px solid #e4e4e7;
   background: #ffffff;
 }
 
-.overview-hidden .toto-header,
+.overview-hidden .agent-header,
 .overview-hidden .message-list,
 .overview-hidden .chat-input {
   padding-left: 76px;
   transition: padding-left 260ms ease;
 }
 
-.toto-title {
+.agent-title {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.toto-title span:last-child {
+.agent-title span:last-child {
   color: #71717a;
   font-size: 0.8rem;
 }
 
-.toto-mark {
+.agent-mark {
   display: inline-grid;
   width: 34px;
   height: 34px;
@@ -515,7 +515,7 @@
   color: #3f3f46;
 }
 
-.toto-mark .material-symbols-rounded {
+.agent-mark .material-symbols-rounded {
   font-size: 1.08rem;
 }
 
@@ -1320,7 +1320,7 @@ pre {
     width: 100%;
   }
 
-  .toto-workspace {
+  .agent-workspace {
     min-height: 620px;
   }
 }

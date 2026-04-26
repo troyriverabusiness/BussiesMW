@@ -6,14 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes.chat import router as chat_router
 from routes.legal_cases import router as legal_cases_router
 from routes.status import router as status_router
-from routes.toto import router as toto_router
+from routes.veritas import router as veritas_router
 from routes.traces import router as traces_router
 
 
 def create_application() -> FastAPI:
     """Create and configure the FastAPI application instance."""
     application = FastAPI(
-        title="BussiesMW API",
+        title="Veritas API",
         version="0.1.0",
         description="Legal-tech case orchestration API backed by server-side Supabase calls.",
     )
@@ -36,5 +36,5 @@ app = create_application()
 app.include_router(chat_router, prefix="/api/v1", tags=["chat"])
 app.include_router(status_router, prefix="/api/v1", tags=["status"])
 app.include_router(legal_cases_router, prefix="/api/v1", tags=["legal cases"])
-app.include_router(toto_router, prefix="/api/v1", tags=["toto"])
+app.include_router(veritas_router, prefix="/api/v1", tags=["veritas"])
 app.include_router(traces_router, prefix="/api/v1", tags=["traces"])

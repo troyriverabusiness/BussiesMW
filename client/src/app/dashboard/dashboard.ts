@@ -39,12 +39,12 @@ interface LegalCase {
   recent: boolean;
 }
 
-interface TotoMessage {
+interface VeritasMessage {
   role: 'user' | 'assistant';
   text: string;
   caseId?: string;
-  status?: TotoMessageStatus;
-  activities?: TotoActivity[];
+  status?: VeritasMessageStatus;
+  activities?: VeritasActivity[];
 }
 
 interface ChatHistoryMessage {
@@ -52,9 +52,9 @@ interface ChatHistoryMessage {
   content: string;
 }
 
-type TotoMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' | 'error';
+type VeritasMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' | 'error';
 
-interface TotoActivity {
+interface VeritasActivity {
   name: string;
   args?: Record<string, unknown>;
   status: 'running' | 'completed' | 'approval-required' | 'denied';
@@ -101,11 +101,11 @@ export class DashboardComponent implements OnInit {
   readonly pageIndex = signal(0);
   readonly isLoading = signal(true);
   readonly errorMessage = signal('');
-  readonly totoOpen = signal(false);
-  readonly totoLoading = signal(false);
-  readonly totoMuted = signal(false);
-  readonly totoDraft = signal('');
-  readonly totoMessages = signal<TotoMessage[]>([]);
+  readonly veritasOpen = signal(false);
+  readonly veritasLoading = signal(false);
+  readonly veritasMuted = signal(false);
+  readonly veritasDraft = signal('');
+  readonly veritasMessages = signal<VeritasMessage[]>([]);
   readonly filters: CaseFilter[] = [
     'All',
     'Action Required',
@@ -184,13 +184,13 @@ export class DashboardComponent implements OnInit {
     this.filtersOpen.update((isOpen) => !isOpen);
   }
 
-  toggleToto(): void {
-    this.totoOpen.update((isOpen) => !isOpen);
+  toggleVeritas(): void {
+    this.veritasOpen.update((isOpen) => !isOpen);
     this.playTone(520, 0.035);
   }
 
-  toggleTotoMute(): void {
-    this.totoMuted.update((isMuted) => !isMuted);
+  toggleVeritasMute(): void {
+    this.veritasMuted.update((isMuted) => !isMuted);
   }
 
   setSearchQuery(query: string): void {
@@ -198,25 +198,25 @@ export class DashboardComponent implements OnInit {
     this.pageIndex.set(0);
   }
 
-  setTotoDraft(message: string): void {
-    this.totoDraft.set(message);
+  setVeritasDraft(message: string): void {
+    this.veritasDraft.set(message);
   }
 
-  sendTotoDraft(event: Event): void {
+  sendVeritasDraft(event: Event): void {
     event.preventDefault();
-    const request = this.totoDraft().trim();
-    if (!request || this.totoLoading()) {
+    const request = this.veritasDraft().trim();
+    if (!request || this.veritasLoading()) {
       return;
     }
 
-    this.totoDraft.set('');
-    this.sendTotoRequest(request);
+    this.veritasDraft.set('');
+    this.sendVeritasRequest(request);
   }
 
   requestCaseUpdate(legalCase: LegalCase, event: Event): void {
     event.stopPropagation();
-    this.totoOpen.set(true);
-    this.sendTotoRequest('Give me an update on this case.', legalCase.id);
+    this.veritasOpen.set(true);
+    this.sendVeritasRequest('Give me an update on this case.', legalCase.id);
   }
 
   nextPage(): void {
@@ -231,40 +231,40 @@ export class DashboardComponent implements OnInit {
     void this.router.navigate(['/cases', legalCase.id]);
   }
 
-  approveExternalContact(activity: TotoActivity): void {
-    if (this.totoLoading()) {
+  approveExternalContact(activity: VeritasActivity): void {
+    if (this.veritasLoading()) {
       return;
     }
 
     this.markActivityStatus(activity, 'completed');
-    this.sendTotoRequest('Approved external contact.', undefined, {
+    this.sendVeritasRequest('Approved external contact.', undefined, {
       name: activity.name,
       args: activity.args ?? {},
     });
   }
 
-  denyExternalContact(activity: TotoActivity): void {
-    if (this.totoLoading()) {
+  denyExternalContact(activity: VeritasActivity): void {
+    if (this.veritasLoading()) {
       return;
     }
 
     this.markActivityStatus(activity, 'denied');
-    this.totoMessages.update((messages) => [
+    this.veritasMessages.update((messages) => [
       ...messages,
       { role: 'user', text: 'Denied external contact.' },
       { role: 'assistant', text: 'External contact was not sent.', status: 'complete', activities: [] },
     ]);
   }
 
-  private async sendTotoRequest(
+  private async sendVeritasRequest(
     request: string,
     caseId?: string,
     approvedToolCall?: ApprovedToolCall,
   ): Promise<void> {
-    this.totoLoading.set(true);
+    this.veritasLoading.set(true);
     const history = this.toChatHistory();
-    this.totoMessages.update((messages) => [...messages, { role: 'user', text: request, caseId }]);
-    this.totoMessages.update((messages) => [
+    this.veritasMessages.update((messages) => [...messages, { role: 'user', text: request, caseId }]);
+    this.veritasMessages.update((messages) => [
       ...messages,
       { role: 'assistant', text: '', status: 'thinking', activities: [] },
     ]);
@@ -272,18 +272,18 @@ export class DashboardComponent implements OnInit {
 
     try {
       await this.streamChatResponse({ message: request, caseId, messages: history, approvedToolCall });
-      this.ensureAssistantMessageText('Toto did not return a response.');
+      this.ensureAssistantMessageText('Veritas did not return a response.');
       this.setLastAssistantStatus('complete');
       this.playTone(660, 0.04);
     } catch {
-      this.replaceLastAssistantMessage('Toto could not reach the AI chat service. Please try again.');
+      this.replaceLastAssistantMessage('Veritas could not reach the AI chat service. Please try again.');
       this.setLastAssistantStatus('error');
     } finally {
-      this.totoLoading.set(false);
+      this.veritasLoading.set(false);
     }
   }
 
-  assistantStatusLabel(message: TotoMessage): string {
+  assistantStatusLabel(message: VeritasMessage): string {
     if (message.role !== 'assistant') {
       return '';
     }
@@ -303,7 +303,7 @@ export class DashboardComponent implements OnInit {
     return message.activities?.length ? 'Context checked' : '';
   }
 
-  assistantStatusIcon(message: TotoMessage): string {
+  assistantStatusIcon(message: VeritasMessage): string {
     if (message.status === 'complete') {
       return 'check_circle';
     }
@@ -313,7 +313,7 @@ export class DashboardComponent implements OnInit {
     return 'progress_activity';
   }
 
-  isAssistantStatusLive(message: TotoMessage): boolean {
+  isAssistantStatusLive(message: VeritasMessage): boolean {
     return (
       message.status === 'thinking' ||
       message.status === 'using-tools' ||
@@ -321,7 +321,7 @@ export class DashboardComponent implements OnInit {
     );
   }
 
-  shouldShowThinking(message: TotoMessage): boolean {
+  shouldShowThinking(message: VeritasMessage): boolean {
     return (
       message.status === 'thinking' ||
       message.status === 'using-tools' ||
@@ -330,7 +330,7 @@ export class DashboardComponent implements OnInit {
     );
   }
 
-  thinkingStatusLabel(message: TotoMessage): string {
+  thinkingStatusLabel(message: VeritasMessage): string {
     if (message.status === 'responding') {
       return 'Writing response';
     }
@@ -340,8 +340,8 @@ export class DashboardComponent implements OnInit {
     return 'Thinking';
   }
 
-  toolCallStatusLabel(activity: TotoActivity): string {
-    const actions: Record<TotoActivity['status'], string> = {
+  toolCallStatusLabel(activity: VeritasActivity): string {
+    const actions: Record<VeritasActivity['status'], string> = {
       running: 'Calling tool',
       completed: 'Called tool',
       'approval-required': 'Approval required',
@@ -351,7 +351,7 @@ export class DashboardComponent implements OnInit {
     return `${action}: ${this.activityLabel(activity)}`;
   }
 
-  activityLabel(activity: TotoActivity): string {
+  activityLabel(activity: VeritasActivity): string {
     const labels: Record<string, string> = {
       list_cases: 'List cases',
       get_case: 'Case lookup',
@@ -362,7 +362,7 @@ export class DashboardComponent implements OnInit {
     return labels[activity.name] ?? this.toTitleCase(activity.name.replace(/^get_/, '').replace(/_/g, ' '));
   }
 
-  activityIcon(activity: TotoActivity): string {
+  activityIcon(activity: VeritasActivity): string {
     const icons: Record<string, string> = {
       list_cases: 'folder_open',
       get_case: 'clinical_notes',
@@ -373,7 +373,7 @@ export class DashboardComponent implements OnInit {
     return icons[activity.name] ?? 'construction';
   }
 
-  approvalPreview(activity: TotoActivity): string {
+  approvalPreview(activity: VeritasActivity): string {
     const message = activity.args?.['message'];
     return typeof message === 'string' ? message : '';
   }
@@ -448,7 +448,7 @@ export class DashboardComponent implements OnInit {
   }
 
   private appendToLastAssistantMessage(content: string): void {
-    this.totoMessages.update((messages) => {
+    this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
       if (lastMessage?.role === 'assistant') {
@@ -462,7 +462,7 @@ export class DashboardComponent implements OnInit {
   }
 
   private replaceLastAssistantMessage(text: string): void {
-    this.totoMessages.update((messages) => {
+    this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
       if (lastMessage?.role === 'assistant') {
@@ -473,7 +473,7 @@ export class DashboardComponent implements OnInit {
   }
 
   private recordToolCall(toolCall: { name: string; args: Record<string, unknown> }): void {
-    this.totoMessages.update((messages) => {
+    this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
       if (lastMessage?.role === 'assistant') {
@@ -491,7 +491,7 @@ export class DashboardComponent implements OnInit {
   }
 
   private completeToolCall(toolName: string): void {
-    this.totoMessages.update((messages) => {
+    this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
       if (lastMessage?.role === 'assistant') {
@@ -508,7 +508,7 @@ export class DashboardComponent implements OnInit {
   }
 
   private markApprovalRequired(toolCall: { name: string; args: Record<string, unknown> }): void {
-    this.totoMessages.update((messages) => {
+    this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
       if (lastMessage?.role === 'assistant') {
@@ -524,8 +524,8 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  private markActivityStatus(activityToUpdate: TotoActivity, status: TotoActivity['status']): void {
-    this.totoMessages.update((messages) =>
+  private markActivityStatus(activityToUpdate: VeritasActivity, status: VeritasActivity['status']): void {
+    this.veritasMessages.update((messages) =>
       messages.map((message) => ({
         ...message,
         activities: message.activities?.map((activity) =>
@@ -539,8 +539,8 @@ export class DashboardComponent implements OnInit {
     );
   }
 
-  private setLastAssistantStatus(status: TotoMessageStatus): void {
-    this.totoMessages.update((messages) => {
+  private setLastAssistantStatus(status: VeritasMessageStatus): void {
+    this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
       if (lastMessage?.role === 'assistant') {
@@ -551,14 +551,14 @@ export class DashboardComponent implements OnInit {
   }
 
   private ensureAssistantMessageText(fallback: string): void {
-    const lastMessage = this.totoMessages().at(-1);
+    const lastMessage = this.veritasMessages().at(-1);
     if (lastMessage?.role === 'assistant' && !lastMessage.text.trim()) {
       this.replaceLastAssistantMessage(fallback);
     }
   }
 
   private toChatHistory(): ChatHistoryMessage[] {
-    return this.totoMessages()
+    return this.veritasMessages()
       .filter((message) => message.text.trim())
       .map((message) => ({ role: message.role, content: message.text }));
   }
@@ -627,7 +627,7 @@ export class DashboardComponent implements OnInit {
   }
 
   private playTone(frequency: number, duration: number): void {
-    if (this.totoMuted()) {
+    if (this.veritasMuted()) {
       return;
     }
 

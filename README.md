@@ -1,6 +1,6 @@
-# BussiesMW
+# Veritas
 
-Multi Agent system for E2E legal processes (in BMW)
+Multi-agent system for end-to-end legal processes.
 
 ## Server
 
@@ -28,13 +28,13 @@ Example response:
 
 ```json
 {
-  "message": "Server is running"
+  "message": "Veritas API is running"
 }
 ```
 
 ### Telegram internal contact tool
 
-The chat agent includes a `contact_internal_employee` tool, shown in the UI as
+The Veritas agent includes a `contact_internal_employee` tool, shown in the UI as
 `Contact internal employee`. It sends a plain-text Telegram message to one
 configured internal recipient.
 
@@ -50,6 +50,6 @@ TELEGRAM_INTERNAL_CHAT_ID=your_internal_chat_id
 TELEGRAM_EXTERNAL_CHAT_ID=your_external_chat_id
 ```
 
-Recipients are fixed by environment configuration; the agent only supplies the
+Recipients are fixed by environment configuration; Veritas only supplies the
 message text. External contact messages require user approval in the chat UI
 before Telegram is called.

@@ -174,7 +174,7 @@ h2 {
 }
 
 .filter-toggle,
-.toto-toggle {
+.veritas-toggle {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -189,7 +189,7 @@ h2 {
   box-shadow: 0 1px 2px rgba(17, 17, 17, 0.05);
 }
 
-.toto-toggle {
+.veritas-toggle {
   border-color: #18181b;
   background: #18181b;
   color: #ffffff;
@@ -198,8 +198,8 @@ h2 {
 
 .filter-toggle:hover,
 .filter-toggle:focus-visible,
-.toto-toggle:hover,
-.toto-toggle:focus-visible {
+.veritas-toggle:hover,
+.veritas-toggle:focus-visible {
   border-color: #b8c4d2;
   background: #f4f4f5;
   color: #111111;
@@ -208,11 +208,11 @@ h2 {
 }
 
 .filter-toggle .material-symbols-rounded,
-.toto-toggle .material-symbols-rounded {
+.veritas-toggle .material-symbols-rounded {
   color: #5d6675;
 }
 
-.toto-toggle .material-symbols-rounded {
+.veritas-toggle .material-symbols-rounded {
   color: currentColor;
 }
 
@@ -220,7 +220,7 @@ h2 {
   margin-left: 2px;
 }
 
-.toto-panel {
+.veritas-panel {
   position: fixed;
   right: 28px;
   bottom: 28px;
@@ -238,19 +238,19 @@ h2 {
   backdrop-filter: blur(12px);
 }
 
-.toto-header,
-.toto-header > div,
-.toto-input {
+.veritas-header,
+.veritas-header > div,
+.veritas-input {
   display: flex;
   align-items: center;
 }
 
-.toto-header {
+.veritas-header {
   justify-content: space-between;
   gap: 12px;
 }
 
-.toto-header > div {
+.veritas-header > div {
   gap: 10px;
 }
 
@@ -265,29 +265,29 @@ h2 {
   font-weight: 900;
 }
 
-.toto-header strong {
+.veritas-header strong {
   display: block;
   color: #111827;
   font-size: 0.96rem;
 }
 
-.toto-header span,
-.toto-message dt {
+.veritas-header span,
+.veritas-message dt {
   color: #6b7280;
   font-size: 0.78rem;
   font-weight: 720;
 }
 
-.toto-window-actions {
+.veritas-window-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .sound-toggle,
-.toto-input button,
-.row-toto-button,
-.close-toto {
+.veritas-input button,
+.row-veritas-button,
+.close-veritas {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -306,30 +306,30 @@ h2 {
 
 .sound-toggle:hover,
 .sound-toggle:focus-visible,
-.toto-input button:hover:not(:disabled),
-.toto-input button:focus-visible:not(:disabled),
-.row-toto-button:hover,
-.row-toto-button:focus-visible,
-.close-toto:hover,
-.close-toto:focus-visible {
+.veritas-input button:hover:not(:disabled),
+.veritas-input button:focus-visible:not(:disabled),
+.row-veritas-button:hover,
+.row-veritas-button:focus-visible,
+.close-veritas:hover,
+.close-veritas:focus-visible {
   border-color: #b8c4d2;
   background: #f8fafc;
   outline: none;
 }
 
-.close-toto {
+.close-veritas {
   width: 32px;
   padding: 0;
 }
 
-.toto-messages {
+.veritas-messages {
   display: grid;
   gap: 10px;
   max-height: min(360px, calc(100vh - 260px));
   overflow: auto;
 }
 
-.toto-message {
+.veritas-message {
   width: min(100%, 720px);
   padding: 12px;
   border: 1px solid #e5eaf1;
@@ -337,13 +337,13 @@ h2 {
   background: #ffffff;
 }
 
-.toto-message.user {
+.veritas-message.user {
   justify-self: end;
   border-color: #d6deea;
   background: #f7f9fc;
 }
 
-.toto-message p {
+.veritas-message p {
   color: #283244;
   font-size: 0.9rem;
   line-height: 1.5;
@@ -534,29 +534,29 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.toto-message dl {
+.veritas-message dl {
   display: grid;
   gap: 8px;
   margin: 12px 0 0;
 }
 
-.toto-message dl div {
+.veritas-message dl div {
   display: grid;
   gap: 2px;
 }
 
-.toto-message dd {
+.veritas-message dd {
   margin: 0;
   color: #283244;
   font-size: 0.88rem;
   line-height: 1.45;
 }
 
-.toto-input {
+.veritas-input {
   gap: 10px;
 }
 
-.toto-input input {
+.veritas-input input {
   flex: 1;
   min-height: 38px;
   border: 1px solid #d9e0e9;
@@ -568,19 +568,19 @@ h2 {
   outline: none;
 }
 
-.toto-input input:focus {
+.veritas-input input:focus {
   border-color: #aeb9c8;
   box-shadow: 0 0 0 3px rgba(24, 34, 53, 0.08);
 }
 
-.toto-input button {
+.veritas-input button {
   min-height: 38px;
   padding: 0 14px;
   background: #182235;
   color: #ffffff;
 }
 
-.toto-input button:disabled {
+.veritas-input button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
@@ -841,7 +841,7 @@ tbody tr.empty-results-row td {
   text-align: right;
 }
 
-.row-toto-button {
+.row-veritas-button {
   width: 32px;
   min-height: 32px;
   border-radius: 6px;
@@ -951,19 +951,19 @@ tbody tr.empty-results-row td {
     max-height: 280px;
   }
 
-  .toto-header,
-  .toto-input {
+  .veritas-header,
+  .veritas-input {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .toto-panel {
+  .veritas-panel {
     right: 14px;
     bottom: 14px;
   }
 
-  .toto-input input,
-  .toto-input button {
+  .veritas-input input,
+  .veritas-input button {
     width: 100%;
   }
 }

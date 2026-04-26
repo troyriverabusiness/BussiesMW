@@ -6,4 +6,4 @@ class StatusService:
 
     def get_status(self) -> StatusResponse:
         """Build the API health response."""
-        return StatusResponse(message="BussiesMW API is running")
+        return StatusResponse(message="Veritas API is running")

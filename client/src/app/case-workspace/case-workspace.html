@@ -186,7 +186,7 @@
           </section>
         </section>
 
-        <section class="toto-workspace" aria-labelledby="toto-title">
+        <section class="agent-workspace" aria-labelledby="veritas-title">
           @if (overviewHidden()) {
             <button class="overview-restore-rail" type="button" (click)="restoreOverview()">
               <span class="material-symbols-rounded" aria-hidden="true">left_panel_open</span>
@@ -194,13 +194,13 @@
             </button>
           }
 
-          <header class="toto-header">
-            <div class="toto-title">
-              <span class="toto-mark" aria-hidden="true">
+          <header class="agent-header">
+            <div class="agent-title">
+              <span class="agent-mark" aria-hidden="true">
                 <span class="material-symbols-rounded">smart_toy</span>
               </span>
               <div>
-                <h2 id="toto-title">Toto</h2>
+                <h2 id="veritas-title">Veritas</h2>
                 <span>Case intelligence assistant</span>
               </div>
             </div>
@@ -209,7 +209,7 @@
           <div class="message-list" aria-live="polite">
             @if (!messages().length && !chatLoading()) {
               <article class="message">
-                <p>Ask Toto about this case to start a live AI chat.</p>
+                <p>Ask Veritas about this case to start a live AI chat.</p>
               </article>
             }
             <ng-container *ngFor="let message of messages()">
