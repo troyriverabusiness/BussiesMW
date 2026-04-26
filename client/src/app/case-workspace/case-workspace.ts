@@ -3,6 +3,10 @@ import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
+import {
+  LegalDataHubSource,
+  LegalSourceListComponent,
+} from '../legal-source-list/legal-source-list.component';
 import { TraceJsonViewerComponent } from '../trace-json-viewer/trace-json-viewer.component';
 
 type LegalCaseStatus = 'Open' | 'Closed' | 'Action Required' | 'Awaiting Counterparty' | 'Awaiting Internal';
@@ -70,6 +74,7 @@ interface PersistedToolCall {
 
 interface PersistedToolResult {
   name: string;
+  result?: unknown;
 }
 
 type ChatMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' | 'error';
@@ -77,6 +82,7 @@ type ChatMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' 
 interface ChatActivity {
   name: string;
   args?: Record<string, unknown>;
+  result?: unknown;
   status: 'running' | 'completed' | 'approval-required' | 'denied';
 }
 
@@ -96,6 +102,7 @@ interface ChatStreamEvent {
   };
   tool_result?: {
     name: string;
+    result?: unknown;
   };
   approval_required?: {
     name: string;
@@ -137,7 +144,7 @@ interface Trace {
 
 @Component({
   selector: 'app-case-workspace',
-  imports: [CommonModule, CurrencyPipe, DatePipe, RouterLink, TraceJsonViewerComponent],
+  imports: [CommonModule, CurrencyPipe, DatePipe, RouterLink, TraceJsonViewerComponent, LegalSourceListComponent],
   templateUrl: './case-workspace.html',
   styleUrl: './case-workspace.scss',
 })
@@ -555,6 +562,10 @@ export class CaseWorkspaceComponent implements OnInit {
   }
 
   toolCallStatusLabel(activity: ChatActivity): string {
+    if (activity.name === 'legal_data_hub_search') {
+      return activity.status === 'running' ? 'Calling Legal Data Hub...' : 'Legal Data Hub research complete';
+    }
+
     const actions: Record<ChatActivity['status'], string> = {
       running: 'Calling tool',
       completed: 'Called tool',
@@ -570,6 +581,7 @@ export class CaseWorkspaceComponent implements OnInit {
       list_cases: 'List cases',
       get_case: 'Case lookup',
       list_case_traces: 'Trace lookup',
+      legal_data_hub_search: 'Legal Data Hub',
       contact_internal_employee: 'Contact internal employee',
       contact_external_person: 'Contact external person',
     };
@@ -581,6 +593,7 @@ export class CaseWorkspaceComponent implements OnInit {
       list_cases: 'folder_open',
       get_case: 'clinical_notes',
       list_case_traces: 'timeline',
+      legal_data_hub_search: 'policy',
       contact_internal_employee: 'mail',
       contact_external_person: 'outgoing_mail',
     };
@@ -602,6 +615,36 @@ export class CaseWorkspaceComponent implements OnInit {
 
   chatSessionTimestamp(session: ChatSession): string {
     return session.updatedAt || session.createdAt;
+  }
+
+  legalDataHubSources(message: ChatMessage): LegalDataHubSource[] {
+    const activity = message.activities?.find(
+      (item) => item.name === 'legal_data_hub_search' && item.status === 'completed',
+    );
+    const result = this.isRecord(activity?.result) ? activity.result : null;
+    const sources = result?.['sources'];
+    if (!Array.isArray(sources)) {
+      return [];
+    }
+
+    return sources.flatMap((source) => {
+      if (!this.isRecord(source)) {
+        return [];
+      }
+      return [
+        {
+          title: this.sourceText(source, 'title') || 'Legal Data Hub source',
+          court: this.sourceText(source, 'court'),
+          date: this.sourceText(source, 'date'),
+          ecli: this.sourceText(source, 'ecli'),
+          aktenzeichen: this.sourceText(source, 'aktenzeichen'),
+          document_type: this.sourceText(source, 'document_type'),
+          relevance_score: this.sourceScore(source['relevance_score']),
+          excerpt: this.sourceText(source, 'excerpt'),
+          why_used: this.sourceText(source, 'why_used'),
+        },
+      ];
+    });
   }
 
   private loadChatSessions(options: { preserveActiveSession?: boolean } = {}): void {
@@ -707,7 +750,7 @@ export class CaseWorkspaceComponent implements OnInit {
       this.recordToolCall(streamEvent.tool_call);
     }
     if (streamEvent.tool_result) {
-      this.completeToolCall(streamEvent.tool_result.name);
+      this.completeToolCall(streamEvent.tool_result.name, streamEvent.tool_result.result);
     }
     if (streamEvent.approval_required) {
       this.markApprovalRequired(streamEvent.approval_required);
@@ -744,7 +787,7 @@ export class CaseWorkspaceComponent implements OnInit {
     });
   }
 
-  private completeToolCall(toolName: string): void {
+  private completeToolCall(toolName: string, result?: unknown): void {
     this.messages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
@@ -753,7 +796,7 @@ export class CaseWorkspaceComponent implements OnInit {
           ...lastMessage,
           status: lastMessage.text.trim() ? 'responding' : 'using-tools',
           activities: (lastMessage.activities ?? []).map((activity) =>
-            activity.name === toolName ? { ...activity, status: 'completed' } : activity,
+            activity.name === toolName ? { ...activity, result, status: 'completed' } : activity,
           ),
         };
       }
@@ -842,11 +885,14 @@ export class CaseWorkspaceComponent implements OnInit {
       return [];
     }
 
-    const completedToolNames = new Set(this.asPersistedToolResults(message.toolResults).map((result) => result.name));
+    const completedToolResults = new Map(
+      this.asPersistedToolResults(message.toolResults).map((result) => [result.name, result.result]),
+    );
     return toolCalls.map((toolCall) => ({
       name: toolCall.name,
       args: toolCall.args,
-      status: !completedToolNames.size || completedToolNames.has(toolCall.name) ? 'completed' : 'running',
+      result: completedToolResults.get(toolCall.name),
+      status: !completedToolResults.size || completedToolResults.has(toolCall.name) ? 'completed' : 'running',
     }));
   }
 
@@ -873,12 +919,28 @@ export class CaseWorkspaceComponent implements OnInit {
       if (!this.isRecord(item) || typeof item['name'] !== 'string') {
         return [];
       }
-      return [{ name: item['name'] }];
+      return [{ name: item['name'], result: item['result'] }];
     });
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  private sourceText(record: Record<string, unknown>, key: string): string {
+    const value = record[key];
+    return typeof value === 'string' ? value : '';
+  }
+
+  private sourceScore(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
   }
 
   private toTitleCase(value: string): string {

@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from services.internal_contact_service import InternalContactService
+from services.legal_data_hub_service import LegalDataHubService
 from services.legal_case_service import LegalCaseService
 from services.trace_service import TraceService
 
@@ -28,11 +29,13 @@ class ChatToolRegistry:
         self,
         legal_case_service: LegalCaseService,
         trace_service: TraceService,
+        legal_data_hub_service: LegalDataHubService,
         internal_contact_service: InternalContactService,
         external_contact_service: InternalContactService,
     ) -> None:
         self._legal_case_service = legal_case_service
         self._trace_service = trace_service
+        self._legal_data_hub_service = legal_data_hub_service
         self._internal_contact_service = internal_contact_service
         self._external_contact_service = external_contact_service
         self._approval_required_tools = {"contact_external_person"}
@@ -40,6 +43,7 @@ class ChatToolRegistry:
             "list_cases": self._list_cases,
             "get_case": self._get_case,
             "list_case_traces": self._list_case_traces,
+            "legal_data_hub_search": self._legal_data_hub_search,
             "contact_internal_employee": self._contact_internal_employee,
             "contact_external_person": self._contact_external_person,
         }
@@ -89,6 +93,31 @@ class ChatToolRegistry:
                             },
                         },
                         "required": ["case_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "legal_data_hub_search",
+                    "description": (
+                        "Search external German legal sources through Legal Data Hub for the current case. "
+                        "Use this before answering German legal questions, case-law questions, statutes, "
+                        "product liability, defect, Rücktritt, Sachmangel, or litigation argument questions."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "case_id": {
+                                "type": "string",
+                                "description": "The UUID of the current case.",
+                            },
+                            "user_question": {
+                                "type": "string",
+                                "description": "The user's legal research question.",
+                            },
+                        },
+                        "required": ["case_id", "user_question"],
                     },
                 },
             },
@@ -158,6 +187,13 @@ class ChatToolRegistry:
         case_id = self._parse_case_id(args)
         traces = self._trace_service.list_case_traces(case_id)
         return {"traces": traces or [], "caseFound": traces is not None}
+
+    def _legal_data_hub_search(self, args: dict[str, Any]) -> dict[str, Any]:
+        case_id = self._parse_case_id(args)
+        user_question = str(args.get("user_question") or args.get("userQuestion") or "").strip()
+        if not user_question:
+            raise ValueError("user_question is required")
+        return self._legal_data_hub_service.search_for_chat(case_id=case_id, user_question=user_question)
 
     def _contact_internal_employee(self, args: dict[str, Any]) -> dict[str, Any]:
         message = str(args.get("message") or "").strip()

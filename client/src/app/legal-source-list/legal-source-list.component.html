@@ -1,0 +1,55 @@
+<section class="legal-sources" aria-label="Legal Data Hub sources used">
+  <div class="legal-sources-heading">
+    <span class="material-symbols-rounded" aria-hidden="true">policy</span>
+    <div>
+      <p>Sources used</p>
+      <h3>Legal Data Hub</h3>
+    </div>
+  </div>
+  <div class="legal-source-list">
+    <article *ngFor="let source of sources" class="legal-source-card">
+      <div>
+        <h4>{{ source.title }}</h4>
+        @if (source.document_type) {
+          <span>{{ source.document_type }}</span>
+        }
+      </div>
+      <dl>
+        @if (source.court) {
+          <div>
+            <dt>Court</dt>
+            <dd>{{ source.court }}</dd>
+          </div>
+        }
+        @if (source.date) {
+          <div>
+            <dt>Date</dt>
+            <dd>{{ source.date }}</dd>
+          </div>
+        }
+        @if (source.ecli) {
+          <div>
+            <dt>ECLI</dt>
+            <dd>{{ source.ecli }}</dd>
+          </div>
+        }
+        @if (source.aktenzeichen) {
+          <div>
+            <dt>Aktenzeichen</dt>
+            <dd>{{ source.aktenzeichen }}</dd>
+          </div>
+        }
+        <div>
+          <dt>Relevance</dt>
+          <dd>{{ relevanceLabel(source) }}</dd>
+        </div>
+      </dl>
+      @if (source.why_used) {
+        <p class="source-reason">{{ source.why_used }}</p>
+      }
+      @if (source.excerpt) {
+        <p class="source-excerpt">{{ source.excerpt }}</p>
+      }
+    </article>
+  </div>
+</section>

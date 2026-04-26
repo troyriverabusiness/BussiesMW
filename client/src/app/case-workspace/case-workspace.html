@@ -269,6 +269,9 @@
                 @if (message.text.trim()) {
                   <article class="message">
                     <div class="message-content" [innerHTML]="renderMessageText(message.text)"></div>
+                    @if (legalDataHubSources(message).length) {
+                      <app-legal-source-list [sources]="legalDataHubSources(message)"></app-legal-source-list>
+                    }
                   </article>
                 }
               }

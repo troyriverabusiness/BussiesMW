@@ -57,6 +57,7 @@ type VeritasMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complet
 interface VeritasActivity {
   name: string;
   args?: Record<string, unknown>;
+  result?: unknown;
   status: 'running' | 'completed' | 'approval-required' | 'denied';
 }
 
@@ -73,6 +74,7 @@ interface ChatStreamEvent {
   };
   tool_result?: {
     name: string;
+    result?: unknown;
   };
   approval_required?: {
     name: string;
@@ -341,6 +343,10 @@ export class DashboardComponent implements OnInit {
   }
 
   toolCallStatusLabel(activity: VeritasActivity): string {
+    if (activity.name === 'legal_data_hub_search') {
+      return activity.status === 'running' ? 'Calling Legal Data Hub...' : 'Legal Data Hub research complete';
+    }
+
     const actions: Record<VeritasActivity['status'], string> = {
       running: 'Calling tool',
       completed: 'Called tool',
@@ -356,6 +362,7 @@ export class DashboardComponent implements OnInit {
       list_cases: 'List cases',
       get_case: 'Case lookup',
       list_case_traces: 'Trace lookup',
+      legal_data_hub_search: 'Legal Data Hub',
       contact_internal_employee: 'Contact internal employee',
       contact_external_person: 'Contact external person',
     };
@@ -367,6 +374,7 @@ export class DashboardComponent implements OnInit {
       list_cases: 'folder_open',
       get_case: 'clinical_notes',
       list_case_traces: 'timeline',
+      legal_data_hub_search: 'policy',
       contact_internal_employee: 'mail',
       contact_external_person: 'outgoing_mail',
     };
@@ -436,7 +444,7 @@ export class DashboardComponent implements OnInit {
       this.recordToolCall(event.tool_call);
     }
     if (event.tool_result) {
-      this.completeToolCall(event.tool_result.name);
+      this.completeToolCall(event.tool_result.name, event.tool_result.result);
     }
     if (event.approval_required) {
       this.markApprovalRequired(event.approval_required);
@@ -490,7 +498,7 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  private completeToolCall(toolName: string): void {
+  private completeToolCall(toolName: string, result?: unknown): void {
     this.veritasMessages.update((messages) => {
       const nextMessages = [...messages];
       const lastMessage = nextMessages.at(-1);
@@ -499,7 +507,7 @@ export class DashboardComponent implements OnInit {
           ...lastMessage,
           status: lastMessage.text.trim() ? 'responding' : 'using-tools',
           activities: (lastMessage.activities ?? []).map((activity) =>
-            activity.name === toolName ? { ...activity, status: 'completed' } : activity,
+            activity.name === toolName ? { ...activity, result, status: 'completed' } : activity,
           ),
         };
       }

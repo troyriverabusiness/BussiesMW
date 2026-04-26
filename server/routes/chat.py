@@ -11,6 +11,7 @@ from schemas.chat import ChatPersistedMessageResponse, ChatRequest, ChatSessionC
 from services.chat_service import ChatService
 from services.chat_tool_registry import ChatToolRegistry
 from services.internal_contact_service import InternalContactService
+from services.legal_data_hub_service import LegalDataHubService
 from services.legal_case_service import LegalCaseService
 from services.trace_service import TraceService
 from supabase_client import SupabaseConfigurationError
@@ -21,14 +22,20 @@ router = APIRouter()
 
 def get_chat_service() -> ChatService:
     case_repository = LegalCaseRepository()
+    trace_repository = TraceRepository()
     legal_case_service = LegalCaseService(repository=case_repository)
     trace_service = TraceService(
         case_repository=case_repository,
-        trace_repository=TraceRepository(),
+        trace_repository=trace_repository,
+    )
+    legal_data_hub_service = LegalDataHubService(
+        case_repository=case_repository,
+        trace_repository=trace_repository,
     )
     tool_registry = ChatToolRegistry(
         legal_case_service=legal_case_service,
         trace_service=trace_service,
+        legal_data_hub_service=legal_data_hub_service,
         internal_contact_service=InternalContactService(),
         external_contact_service=InternalContactService(chat_id_environment_key="TELEGRAM_EXTERNAL_CHAT_ID"),
     )

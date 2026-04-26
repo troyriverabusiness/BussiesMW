@@ -131,8 +131,9 @@ class ChatService:
                     return
 
                 tool_result = self._dispatch_tool(tool_name, tool_args)
-                tool_results_log.append({"name": tool_name})
-                yield _sse_event({"tool_result": {"name": tool_name}})
+                parsed_tool_result = self._parse_tool_result(tool_result)
+                tool_results_log.append({"name": tool_name, "result": parsed_tool_result or None})
+                yield _sse_event({"tool_result": {"name": tool_name, "result": parsed_tool_result or None}})
 
                 messages.append(
                     {
@@ -230,8 +231,14 @@ class ChatService:
                     "when the user asks you to notify, message, escalate to, or contact an "
                     "internal employee. Use the contact_external_person tool when the user "
                     "asks you to contact an external person; that tool will be paused for "
-                    "explicit user approval before it sends anything. Keep answers concise "
-                    "and grounded in the tool results."
+                    "explicit user approval before it sends anything. For German legal "
+                    "research, case-law, statutes, product liability, defect, Rücktritt, "
+                    "Sachmangel, litigation, or legal-argument questions, call the "
+                    "legal_data_hub_search tool before answering. Legal answers must use "
+                    "BMW-internal wording such as 'Preliminary internal assessment', "
+                    "'Based on available case data', 'Requires legal review', and "
+                    "'Recommended next action'. Do not present the response as final legal "
+                    "advice. Keep answers concise and grounded in the tool results."
                 ),
             }
         ]

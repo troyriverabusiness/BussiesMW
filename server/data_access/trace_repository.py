@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from httpx import HTTPError
@@ -35,6 +36,60 @@ class TraceRepository:
                 trace_steps.sort(key=lambda step: str(step.get("created_at") or ""))
 
         return traces
+
+    def create_trace_step(
+        self,
+        case_id: UUID,
+        step: str,
+        input_payload: dict[str, object],
+        output_payload: dict[str, object],
+        reasoning: str,
+        confidence: float,
+        tool_calls: list[dict[str, object]],
+    ) -> dict[str, object]:
+        now = datetime.now(UTC).isoformat()
+        try:
+            trace_response = (
+                self._get_client()
+                .table("traces")
+                .insert(
+                    {
+                        "case_id": str(case_id),
+                        "started_at": now,
+                        "completed_at": now,
+                    }
+                )
+                .execute()
+            )
+            traces = trace_response.data or []
+            if not traces:
+                raise TraceRepositoryError("Supabase did not return the created trace.")
+
+            trace_id = str(traces[0]["id"])
+            step_response = (
+                self._get_client()
+                .table("trace_steps")
+                .insert(
+                    {
+                        "trace_id": trace_id,
+                        "step": step,
+                        "input": input_payload,
+                        "output": output_payload,
+                        "reasoning": reasoning,
+                        "confidence": confidence,
+                        "tool_calls": tool_calls,
+                        "created_at": now,
+                    }
+                )
+                .execute()
+            )
+        except (APIError, HTTPError) as exc:
+            raise TraceRepositoryError("Unable to save trace step in Supabase.") from exc
+
+        trace_steps = step_response.data or []
+        if not trace_steps:
+            raise TraceRepositoryError("Supabase did not return the created trace step.")
+        return dict(trace_steps[0])
 
     def _get_client(self) -> Client:
         if self._client is None:
