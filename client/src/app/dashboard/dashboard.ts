@@ -614,6 +614,10 @@ export class DashboardComponent implements OnInit {
   }
 
   private recordDownload(attachment: ChatDocumentAttachment): void {
+    if (!attachment.downloadUrl) {
+      return;
+    }
+
     const downloadUrl = this.absoluteArtifactUrl(attachment.downloadUrl);
     const downloadableAttachment = { ...attachment, downloadUrl, downloaded: true };
     this.veritasMessages.update((messages) => {
@@ -627,6 +631,7 @@ export class DashboardComponent implements OnInit {
       }
       return nextMessages;
     });
+    this.openAttachment(downloadableAttachment);
     this.triggerDownload(downloadableAttachment);
   }
 
@@ -805,6 +810,13 @@ export class DashboardComponent implements OnInit {
     document.body.appendChild(link);
     link.click();
     link.remove();
+  }
+
+  private openAttachment(attachment: ChatDocumentAttachment): void {
+    if (attachment.contentType !== 'application/pdf') {
+      return;
+    }
+    window.open(attachment.downloadUrl, '_blank', 'noopener');
   }
 
   private absoluteArtifactUrl(downloadUrl: string): string {

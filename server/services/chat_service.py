@@ -167,7 +167,7 @@ class ChatService:
                             }
                         )
                 artifact = parsed_tool_result.get("artifact")
-                if isinstance(artifact, dict):
+                if self._is_download_artifact(artifact):
                     tool_results_log.append({"name": tool_name, "artifact": artifact})
                 else:
                     tool_results_log.append({"name": tool_name})
@@ -179,7 +179,7 @@ class ChatService:
                         "requiresHumanReview": bool(parsed_tool_result.get("requiresHumanReview")),
                     }
                 yield _sse_event({"tool_result": {"name": tool_name}})
-                if isinstance(artifact, dict):
+                if self._is_download_artifact(artifact):
                     yield _sse_event({"download": artifact})
 
                 messages.append(
@@ -279,9 +279,10 @@ class ChatService:
                     "information-gap, priority, and next-action questions. Use review_traceability "
                     "for audit trail, evidence, trace confidence, reasoning, and human-review "
                     "questions. Use draft_legal_document for legal drafting, document preparation, "
-                    "and PDF generation requests. Use prepare_contact_message before notifications, "
-                    "escalations, or contact-message drafting. Use local tools directly only for "
-                    "simple lookups. Use contact_internal_employee when the user asks you to notify, "
+                    "and PDF generation requests; do not ask for approval before generating legal "
+                    "document PDFs. Use prepare_contact_message before notifications, escalations, "
+                    "or contact-message drafting. Use local tools directly only for simple lookups. "
+                    "Use contact_internal_employee when the user asks you to notify, "
                     "message, escalate to, or contact an internal employee. Use contact_external_person "
                     "only when the user asks you to contact an external person; that tool will be "
                     "paused for explicit user approval before it sends anything. Include the current "
@@ -372,3 +373,12 @@ class ChatService:
         except json.JSONDecodeError:
             return {}
         return result if isinstance(result, dict) else {}
+
+    def _is_download_artifact(self, value: Any) -> bool:
+        return (
+            isinstance(value, dict)
+            and isinstance(value.get("artifactId"), str)
+            and isinstance(value.get("filename"), str)
+            and isinstance(value.get("contentType"), str)
+            and isinstance(value.get("downloadUrl"), str)
+        )

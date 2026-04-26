@@ -1,30 +1,66 @@
 # Veritas
 
-Multi-agent system for end-to-end legal processes.
+Veritas is a multi-agent legal automation platform for end-to-end case work. It helps lawyers and legal departments coordinate intake, case analysis, document work, internal escalation, client-facing communication, and workflow execution from one workspace.
 
-## Server
+The business goal is practical: help real legal teams scale the number of matters they can handle without increasing headcount at the same rate. By automating repeatable legal operations and routing work to specialized agents, Veritas can reduce the amount of work outsourced to external providers, saving cost while keeping more context and control inside the team.
 
-Basic FastAPI backend skeleton with separated responsibilities:
+## Multi-Agent Legal Automation
 
-- `routes`: one file per endpoint group, with route handlers and route-local dependency wiring
-- `services`: business logic
-- `data_access`: data access
-- `schemas`: response models
-- `main.py`: FastAPI bootstrap
+Veritas is designed as a multi-agent system rather than a single chatbot. Each agent or tool has a bounded role in the legal workflow, such as answering case questions, retrieving case data, generating documents, contacting internal employees, or preparing external communications for approval.
 
-### Run
+This architecture supports E2E lawyer and legal department assistance:
+
+- Case workspace support for matter context, notes, chat, and document activity.
+- Server-side orchestration for legal cases, chat, traces, documents, and agent tools.
+- Human approval gates for sensitive external actions.
+- Integrations with Supabase for case data, OpenAI for reasoning, and Telegram for internal or external contact flows.
+
+## Project Structure
+
+- `client`: Angular application for the legal workspace and dashboard.
+- `server`: FastAPI API for case orchestration, agent chat, tools, documents, traces, and integrations.
+- `server/routes`: API endpoint groups.
+- `server/services`: business logic and agent orchestration.
+- `server/data_access`: external clients and persistence access.
+- `server/schemas`: response and request models.
+
+## Setup
+
+Create a local environment file from the example:
+
+```bash
+cp .env.example .env
+```
+
+Configure the required values:
+
+```bash
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+OPENAI_API_KEY=...
+OPENAI_CHAT_MODEL=gpt-5.5
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_INTERNAL_CHAT_ID=...
+TELEGRAM_EXTERNAL_CHAT_ID=...
+```
+
+## Run The Server
+
+The server uses Python and `uv`.
 
 ```bash
 cd server
-pip install -r requirements.txt
-uvicorn main:app --reload
+uv sync
+uv run uvicorn main:app --reload
 ```
 
-### Route
+Health check:
 
-`GET /api/v1/status`
+```bash
+curl http://localhost:8000/api/v1/status
+```
 
-Example response:
+Expected response:
 
 ```json
 {
@@ -32,24 +68,24 @@ Example response:
 }
 ```
 
-### Telegram internal contact tool
+## Run The Client
 
-The Veritas agent includes a `contact_internal_employee` tool, shown in the UI as
-`Contact internal employee`. It sends a plain-text Telegram message to one
-configured internal recipient.
+```bash
+cd client
+npm install
+npm start
+```
 
-Setup:
+The Angular app runs locally at `http://localhost:4200` and talks to the FastAPI server through the configured API routes.
+
+## Telegram Contact Tool
+
+The Veritas agent includes a `contact_internal_employee` tool, shown in the UI as `Contact internal employee`. It sends a plain-text Telegram message to one configured internal recipient.
+
+To configure it:
 
 1. Create a Telegram bot with BotFather and copy the bot token.
 2. Start a chat with the bot, or add the bot to the target internal chat.
-3. Set these values in `.env`:
+3. Set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_INTERNAL_CHAT_ID`, and `TELEGRAM_EXTERNAL_CHAT_ID` in `.env`.
 
-```bash
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_INTERNAL_CHAT_ID=your_internal_chat_id
-TELEGRAM_EXTERNAL_CHAT_ID=your_external_chat_id
-```
-
-Recipients are fixed by environment configuration; Veritas only supplies the
-message text. External contact messages require user approval in the chat UI
-before Telegram is called.
+Recipients are fixed by environment configuration. Veritas supplies the message text, and external contact messages require user approval in the chat UI before Telegram is called.

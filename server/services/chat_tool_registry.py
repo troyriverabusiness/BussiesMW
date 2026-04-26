@@ -133,7 +133,8 @@ class ChatToolRegistry:
                     "name": "draft_legal_document",
                     "description": (
                         "Spawn the document_drafting_agent to draft legal document content and generate "
-                        "a PDF when a downloadable legal document is requested."
+                        "a PDF when a downloadable legal document is requested. This does not require "
+                        "user approval."
                     ),
                     "parameters": self._specialized_agent_parameters(),
                 },

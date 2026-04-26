@@ -64,10 +64,13 @@ AGENT_SPECS: dict[str, AgentSpec] = {
         allowed_tools=("get_case", "generate_legal_document_pdf"),
         system_prompt=(
             "You are the Veritas document drafting agent. Draft formal, review-ready legal "
-            "document sections grounded in available case information. When the user asks for "
-            "a downloadable PDF, call generate_legal_document_pdf. Use only the provided tools. "
+            "document sections grounded in available case information. If the task asks to "
+            "draft, create, prepare, produce, generate, or download a legal document or PDF, "
+            "you must call generate_legal_document_pdf before your final answer. Do not ask "
+            "the user for approval before generating the PDF. Use only the provided tools. "
             "Return JSON only with keys: summary, findings, recommendedActions, confidence, "
-            "sourcesUsed, requiresHumanReview, artifact."
+            "sourcesUsed, requiresHumanReview, artifact. Set requiresHumanReview to false "
+            "after the PDF has been generated; counsel review can be mentioned in summary."
         ),
     ),
     "contact_planning_agent": AgentSpec(
@@ -122,12 +125,17 @@ class ChatAgentService:
             content = message.content or ""
 
             if not tool_calls:
-                return self._normalize_result(
+                normalized_result = self._normalize_result(
                     spec=spec,
                     raw_content=content,
+                    task=task,
+                    case_id=case_id,
                     fallback_sources=used_tools,
                     fallback_artifact=artifact,
                 )
+                if spec.name == "document_drafting_agent" and "artifact" in normalized_result:
+                    normalized_result["requiresHumanReview"] = False
+                return normalized_result
 
             messages.append(self._assistant_message(content, tool_calls))
             for tool_call in tool_calls:
@@ -184,6 +192,8 @@ class ChatAgentService:
         self,
         spec: AgentSpec,
         raw_content: str,
+        task: str,
+        case_id: UUID | None,
         fallback_sources: list[str],
         fallback_artifact: dict[str, Any] | None,
     ) -> dict[str, Any]:
@@ -199,10 +209,15 @@ class ChatAgentService:
             "requiresHumanReview": bool(result.get("requiresHumanReview")),
         }
         artifact = result.get("artifact")
-        if isinstance(artifact, dict):
+        if self._is_download_artifact(artifact):
             normalized["artifact"] = artifact
-        elif fallback_artifact:
+        elif self._is_download_artifact(fallback_artifact):
             normalized["artifact"] = fallback_artifact
+        elif spec.name == "document_drafting_agent":
+            generated_artifact = self._generate_fallback_document(task, case_id, normalized, result)
+            if generated_artifact:
+                normalized["artifact"] = generated_artifact
+                normalized["sourcesUsed"] = list(dict.fromkeys([*normalized["sourcesUsed"], "generate_legal_document_pdf"]))
         return normalized
 
     def _parse_json_object(self, value: str) -> dict[str, Any]:
@@ -226,7 +241,63 @@ class ChatAgentService:
         except json.JSONDecodeError:
             return None
         artifact = result.get("artifact") if isinstance(result, dict) else None
-        return artifact if isinstance(artifact, dict) else None
+        return artifact if self._is_download_artifact(artifact) else None
+
+    def _generate_fallback_document(
+        self,
+        task: str,
+        case_id: UUID | None,
+        normalized: dict[str, Any],
+        raw_result: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        sections = self._document_sections(raw_result, normalized)
+        if not sections:
+            return None
+
+        document_result = self._tool_provider.dispatch_json(
+            "generate_legal_document_pdf",
+            {
+                "documentType": str(raw_result.get("documentType") or raw_result.get("document_type") or "Legal Document"),
+                "title": str(raw_result.get("title") or self._document_title(task)),
+                "caseId": str(case_id) if case_id else None,
+                "sections": sections,
+                "signatureBlocks": raw_result.get("signatureBlocks") or raw_result.get("signature_blocks") or ["Prepared for counsel review"],
+            },
+        )
+        return self._artifact_from_tool_result(document_result)
+
+    def _document_sections(self, raw_result: dict[str, Any], normalized: dict[str, Any]) -> list[dict[str, str]]:
+        raw_sections = raw_result.get("sections")
+        if isinstance(raw_sections, list):
+            sections = [
+                {"heading": str(item.get("heading") or item.get("title")), "body": str(item.get("body") or item.get("content"))}
+                for item in raw_sections
+                if isinstance(item, dict) and (item.get("heading") or item.get("title")) and (item.get("body") or item.get("content"))
+            ]
+            if sections:
+                return sections
+
+        sections = [{"heading": "Draft", "body": str(normalized["summary"])}]
+        findings = normalized.get("findings")
+        if isinstance(findings, list) and findings:
+            sections.append({"heading": "Important Details", "body": "\n\n".join(str(item) for item in findings)})
+        actions = normalized.get("recommendedActions")
+        if isinstance(actions, list) and actions:
+            sections.append({"heading": "Recommended Next Steps", "body": "\n\n".join(str(item) for item in actions)})
+        return [section for section in sections if section["body"].strip()]
+
+    def _document_title(self, task: str) -> str:
+        title = " ".join(task.split())[:90]
+        return title or "Veritas Legal Document"
+
+    def _is_download_artifact(self, value: Any) -> bool:
+        return (
+            isinstance(value, dict)
+            and isinstance(value.get("artifactId"), str)
+            and isinstance(value.get("filename"), str)
+            and isinstance(value.get("contentType"), str)
+            and isinstance(value.get("downloadUrl"), str)
+        )
 
     def _string_list(self, value: Any) -> list[str]:
         if not isinstance(value, list):
