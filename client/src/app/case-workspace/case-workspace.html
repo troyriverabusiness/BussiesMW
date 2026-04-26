@@ -55,6 +55,46 @@
           </button>
         </nav>
 
+        <div class="chat-history" aria-label="Chat history">
+          <section>
+            <div class="chat-history-heading">
+              <h2>Conversations</h2>
+              <button
+                class="new-chat-button"
+                type="button"
+                [disabled]="chatSessionsLoading() || chatMessagesLoading() || chatLoading()"
+                (click)="startNewChatSession()"
+              >
+                <span class="material-symbols-rounded" aria-hidden="true">add</span>
+                <span>New</span>
+              </button>
+            </div>
+
+            @if (chatSessionsError()) {
+              <p class="chat-history-state error">{{ chatSessionsError() }}</p>
+            } @else if (chatSessionsLoading() && !chatSessions().length) {
+              <p class="chat-history-state">Loading conversations...</p>
+            } @else if (!chatSessions().length) {
+              <p class="chat-history-state">No conversations yet.</p>
+            }
+
+            <button
+              *ngFor="let session of chatSessions()"
+              type="button"
+              [class.active]="activeChatSessionId() === session.id"
+              (click)="selectChatSession(session)"
+            >
+              <span>
+                <strong>{{ chatSessionTitle(session) }}</strong>
+                <small>{{ activeChatSessionId() === session.id && chatMessagesLoading() ? 'Loading messages...' : 'Case chat' }}</small>
+              </span>
+              <time [attr.datetime]="chatSessionTimestamp(session)">
+                {{ chatSessionTimestamp(session) | date: 'MMM d' }}
+              </time>
+            </button>
+          </section>
+        </div>
+
       </aside>
 
       @if (activeSection() === 'overview') {
@@ -172,15 +212,45 @@
                 <p>Ask Toto about this case to start a live AI chat.</p>
               </article>
             }
-            <article *ngFor="let message of messages()" class="message" [class.user]="message.role === 'user'">
-              <p>{{ message.text }}</p>
-            </article>
-
-            @if (chatLoading()) {
-              <article class="message">
-                <p>Toto is reviewing the case record...</p>
-              </article>
-            }
+            <ng-container *ngFor="let message of messages()">
+              @if (message.role === 'user') {
+                <article class="message user">
+                  <p>{{ message.text }}</p>
+                </article>
+              } @else {
+                @if (shouldShowThinking(message)) {
+                  <article class="thinking-card" [class.live]="isAssistantStatusLive(message)">
+                    <div class="message-status">
+                      <span class="material-symbols-rounded" aria-hidden="true">
+                        {{ assistantStatusIcon(message) }}
+                      </span>
+                      <span>{{ thinkingStatusLabel(message) }}</span>
+                    </div>
+                  </article>
+                }
+                <article
+                  *ngFor="let activity of message.activities"
+                  class="tool-call-card"
+                  [class.complete]="activity.status === 'completed'"
+                  [class.live]="activity.status === 'running'"
+                >
+                  <div class="message-status">
+                    <span class="material-symbols-rounded" aria-hidden="true">
+                      {{ activity.status === 'completed' ? 'check_circle' : 'build_circle' }}
+                    </span>
+                    <span>{{ toolCallStatusLabel(activity) }}</span>
+                  </div>
+                  <div class="tool-call-body">
+                    <span>{{ activityDetail(activity) }}</span>
+                  </div>
+                </article>
+                @if (message.text.trim()) {
+                  <article class="message">
+                    <div class="message-content" [innerHTML]="renderMessageText(message.text)"></div>
+                  </article>
+                }
+              }
+            </ng-container>
           </div>
 
           <form class="chat-input" (submit)="sendChatMessage($event)">
@@ -190,7 +260,7 @@
               [value]="chatDraft()"
               (input)="setChatDraft($any($event.target).value)"
             />
-            <button type="submit" [disabled]="!chatDraft().trim() || chatLoading()">
+            <button type="submit" [disabled]="!chatDraft().trim() || chatLoading() || chatMessagesLoading()">
               <span class="material-symbols-rounded" aria-hidden="true">send</span>
               <span>Send</span>
             </button>

@@ -1,9 +1,12 @@
 import json
 from collections.abc import Iterator
 from typing import Any
+from uuid import UUID
 
+from data_access.chat_repository import ChatRepository
+from data_access.legal_case_repository import LegalCaseRepository
 from data_access.openai_chat_client import OpenAIChatClient
-from schemas.chat import ChatRequest
+from schemas.chat import ChatPersistedMessageResponse, ChatRequest, ChatSessionResponse
 from services.chat_tool_registry import ChatToolRegistry
 
 
@@ -22,24 +25,79 @@ class ChatService:
         self,
         openai_client: OpenAIChatClient,
         tool_registry: ChatToolRegistry,
+        chat_repository: ChatRepository,
+        case_repository: LegalCaseRepository,
     ) -> None:
         self._openai_client = openai_client
         self._tool_registry = tool_registry
+        self._chat_repository = chat_repository
+        self._case_repository = case_repository
+
+    def list_case_sessions(self, case_id: UUID) -> list[ChatSessionResponse] | None:
+        if self._case_repository.get_by_id(case_id) is None:
+            return None
+
+        sessions = self._chat_repository.list_sessions_by_case_id(case_id)
+        return [ChatSessionResponse.model_validate(session) for session in sessions]
+
+    def create_case_session(self, case_id: UUID, title: str | None = None) -> ChatSessionResponse | None:
+        if self._case_repository.get_by_id(case_id) is None:
+            return None
+
+        session = self._chat_repository.create_session(
+            case_id=case_id,
+            title=self._session_title(title or "New chat"),
+        )
+        return ChatSessionResponse.model_validate(session)
+
+    def list_session_messages(self, session_id: UUID) -> list[ChatPersistedMessageResponse] | None:
+        if self._chat_repository.get_session(session_id) is None:
+            return None
+
+        messages = self._chat_repository.list_messages_by_session_id(session_id)
+        return [ChatPersistedMessageResponse.model_validate(message) for message in messages]
 
     def stream_chat(self, payload: ChatRequest) -> Iterator[str]:
-        messages = self._build_messages(payload)
-
         try:
-            yield from self._stream_model_loop(messages)
+            session = self._prepare_session(payload)
+            persisted_messages = None
+            if session:
+                yield _sse_event({"session": {"id": str(session["id"])}})
+                persisted_messages = self._chat_repository.list_messages_by_session_id(UUID(str(session["id"])))
+
+            messages = self._build_messages(payload, persisted_messages)
+            assistant_content_parts: list[str] = []
+            tool_calls_log: list[dict[str, object]] = []
+            tool_results_log: list[dict[str, object]] = []
+
+            yield from self._stream_model_loop(messages, assistant_content_parts, tool_calls_log, tool_results_log)
+            if session:
+                assistant_content = "".join(assistant_content_parts).strip()
+                if assistant_content:
+                    self._chat_repository.add_message(
+                        session_id=UUID(str(session["id"])),
+                        role="assistant",
+                        content=assistant_content,
+                        tool_calls=tool_calls_log or None,
+                        tool_results=tool_results_log or None,
+                    )
+                    self._chat_repository.update_session_after_message(UUID(str(session["id"])))
         except Exception as exc:
             yield _sse_event({"error": str(exc)})
         finally:
             yield _sse_event("[DONE]")
 
-    def _stream_model_loop(self, messages: list[dict[str, Any]]) -> Iterator[str]:
+    def _stream_model_loop(
+        self,
+        messages: list[dict[str, Any]],
+        assistant_content_parts: list[str],
+        tool_calls_log: list[dict[str, object]],
+        tool_results_log: list[dict[str, object]],
+    ) -> Iterator[str]:
         for iteration in range(MAX_TOOL_ITERATIONS):
             content_parts: list[str] = []
             tool_calls = yield from self._stream_completion(messages, content_parts)
+            assistant_content_parts.extend(content_parts)
 
             if not tool_calls:
                 return
@@ -54,9 +112,11 @@ class ChatService:
             for tool_call in tool_calls.values():
                 tool_name = str(tool_call["function"]["name"])
                 tool_args = self._parse_tool_args(str(tool_call["function"]["arguments"]))
+                tool_calls_log.append({"name": tool_name, "args": tool_args})
                 yield _sse_event({"tool_call": {"name": tool_name, "args": tool_args}})
 
                 tool_result = self._dispatch_tool(tool_name, tool_args)
+                tool_results_log.append({"name": tool_name})
                 yield _sse_event({"tool_result": {"name": tool_name}})
 
                 messages.append(
@@ -111,7 +171,11 @@ class ChatService:
 
         return tool_calls
 
-    def _build_messages(self, payload: ChatRequest) -> list[dict[str, Any]]:
+    def _build_messages(
+        self,
+        payload: ChatRequest,
+        persisted_messages: list[dict[str, object]] | None = None,
+    ) -> list[dict[str, Any]]:
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
@@ -122,6 +186,13 @@ class ChatService:
                 ),
             }
         ]
+        if payload.case_id:
+            messages.append({"role": "system", "content": f"Current case ID: {payload.case_id}"})
+
+        if persisted_messages is not None:
+            for message in persisted_messages:
+                messages.append({"role": message["role"], "content": message["content"]})
+            return messages
 
         for message in payload.messages:
             messages.append({"role": message.role, "content": message.content})
@@ -131,6 +202,53 @@ class ChatService:
             user_content = f"{payload.message}\n\nCurrent case ID: {payload.case_id}"
         messages.append({"role": "user", "content": user_content})
         return messages
+
+    def _prepare_session(self, payload: ChatRequest) -> dict[str, object] | None:
+        if payload.session_id:
+            session = self._chat_repository.get_session(payload.session_id)
+            if session is None:
+                raise ValueError("Chat session not found.")
+            if payload.case_id and str(session["case_id"]) != str(payload.case_id):
+                raise ValueError("Chat session does not belong to the current case.")
+
+            self._chat_repository.add_message(
+                session_id=payload.session_id,
+                role="user",
+                content=payload.message,
+            )
+            title = self._title_for_existing_session(session, payload.message)
+            self._chat_repository.update_session_after_message(payload.session_id, title=title)
+            if title:
+                session["title"] = title
+            return session
+
+        if not payload.case_id:
+            return None
+
+        session = self._chat_repository.create_session(
+            case_id=payload.case_id,
+            title=self._session_title(payload.message),
+        )
+        session_id = UUID(str(session["id"]))
+        self._chat_repository.add_message(
+            session_id=session_id,
+            role="user",
+            content=payload.message,
+        )
+        self._chat_repository.update_session_after_message(session_id)
+        return session
+
+    def _title_for_existing_session(self, session: dict[str, object], message: str) -> str | None:
+        current_title = str(session.get("title") or "")
+        if current_title and current_title != "New chat":
+            return None
+        return self._session_title(message)
+
+    def _session_title(self, value: str) -> str:
+        title = " ".join(value.split())
+        if not title:
+            return "New chat"
+        return title[:60]
 
     def _parse_tool_args(self, raw_args: str) -> dict[str, Any]:
         if not raw_args:

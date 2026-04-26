@@ -33,6 +33,9 @@ interface LegalCaseDetail {
 interface ChatMessage {
   role: 'assistant' | 'user';
   text: string;
+  status?: ChatMessageStatus;
+  activities?: ChatActivity[];
+  createdAt?: string;
 }
 
 interface ChatHistoryMessage {
@@ -40,7 +43,46 @@ interface ChatHistoryMessage {
   content: string;
 }
 
+interface ChatSession {
+  id: string;
+  caseId: string;
+  userId?: string | null;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PersistedChatMessage {
+  id: string;
+  sessionId: string;
+  role: 'assistant' | 'user';
+  content: string;
+  toolCalls?: unknown;
+  toolResults?: unknown;
+  createdAt: string;
+}
+
+interface PersistedToolCall {
+  name: string;
+  args?: Record<string, unknown>;
+}
+
+interface PersistedToolResult {
+  name: string;
+}
+
+type ChatMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' | 'error';
+
+interface ChatActivity {
+  name: string;
+  args?: Record<string, unknown>;
+  status: 'running' | 'completed';
+}
+
 interface ChatStreamEvent {
+  session?: {
+    id: string;
+  };
   content?: string;
   tool_call?: {
     name: string;
@@ -96,6 +138,7 @@ export class CaseWorkspaceComponent implements OnInit {
   private readonly caseApiUrl = `${this.apiOrigin}/api/v1/cases/${this.caseId}`;
   private readonly traceabilityApiUrl = `${this.apiOrigin}/api/v1/cases/${this.caseId}/traces`;
   private readonly chatApiUrl = `${this.apiOrigin}/api/v1/chat`;
+  private readonly chatSessionsApiUrl = `${this.apiOrigin}/api/v1/cases/${this.caseId}/chat-sessions`;
   private readonly reviewsApiUrl = `${this.apiOrigin}/api/v1/reviews`;
 
   readonly legalCase = signal<LegalCaseDetail | null>(null);
@@ -107,6 +150,11 @@ export class CaseWorkspaceComponent implements OnInit {
   readonly chatDraft = signal('');
   readonly chatLoading = signal(false);
   readonly messages = signal<ChatMessage[]>([]);
+  readonly chatSessions = signal<ChatSession[]>([]);
+  readonly activeChatSessionId = signal<string | null>(null);
+  readonly chatSessionsLoading = signal(false);
+  readonly chatMessagesLoading = signal(false);
+  readonly chatSessionsError = signal('');
   readonly traceability = signal<Trace[] | null>(null);
   readonly traceabilityLoading = signal(false);
   readonly traceabilityError = signal('');
@@ -140,6 +188,7 @@ export class CaseWorkspaceComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.loadChatSessions();
     this.http
       .get<LegalCaseDetail>(this.caseApiUrl)
       .pipe(finalize(() => this.isLoading.set(false)))
@@ -174,28 +223,83 @@ export class CaseWorkspaceComponent implements OnInit {
     this.chatDraft.set(message);
   }
 
+  startNewChatSession(): void {
+    if (this.chatSessionsLoading() || this.chatMessagesLoading() || this.chatLoading()) {
+      return;
+    }
+
+    this.chatSessionsLoading.set(true);
+    this.chatSessionsError.set('');
+    this.http
+      .post<ChatSession>(this.chatSessionsApiUrl, {})
+      .pipe(finalize(() => this.chatSessionsLoading.set(false)))
+      .subscribe({
+        next: (session) => {
+          this.chatSessions.update((sessions) => [session, ...sessions.filter((item) => item.id !== session.id)]);
+          this.activeChatSessionId.set(session.id);
+          this.messages.set([]);
+        },
+        error: () => this.chatSessionsError.set('Chat session could not be created.'),
+      });
+  }
+
+  selectChatSession(session: ChatSession): void {
+    if (this.chatMessagesLoading() || this.activeChatSessionId() === session.id) {
+      return;
+    }
+
+    this.activeChatSessionId.set(session.id);
+    this.chatMessagesLoading.set(true);
+    this.chatSessionsError.set('');
+    this.http
+      .get<PersistedChatMessage[]>(this.chatSessionMessagesApiUrl(session.id))
+      .pipe(finalize(() => this.chatMessagesLoading.set(false)))
+      .subscribe({
+        next: (messages) => {
+          this.messages.set(
+            messages.map((message) => {
+              const activities = this.persistedToolActivities(message);
+              return {
+                role: message.role,
+                text: message.content,
+                createdAt: message.createdAt,
+                status: message.role === 'assistant' ? 'complete' : undefined,
+                activities: activities.length ? activities : undefined,
+              };
+            }),
+          );
+        },
+        error: () => this.chatSessionsError.set('Chat messages could not be loaded.'),
+      });
+  }
+
   async sendChatMessage(event: Event): Promise<void> {
     event.preventDefault();
     const message = this.chatDraft().trim();
-    if (!message || this.chatLoading()) {
+    if (!message || this.chatLoading() || this.chatMessagesLoading()) {
       return;
     }
 
     const history = this.toChatHistory();
+    const sessionId = this.activeChatSessionId();
     this.chatDraft.set('');
     this.chatLoading.set(true);
     this.appendMessage({ role: 'user', text: message });
-    this.appendMessage({ role: 'assistant', text: '' });
+    this.appendMessage({ role: 'assistant', text: '', status: 'thinking', activities: [] });
 
     try {
       await this.streamChatResponse({
         message,
         caseId: this.caseId,
+        sessionId,
         messages: history,
       });
       this.ensureAssistantMessageText('Toto did not return a response.');
+      this.setLastAssistantStatus('complete');
+      this.loadChatSessions({ preserveActiveSession: true });
     } catch (error) {
       this.replaceLastAssistantMessage(this.chatFailureMessage(error));
+      this.setLastAssistantStatus('error');
     } finally {
       this.chatLoading.set(false);
     }
@@ -331,6 +435,133 @@ export class CaseWorkspaceComponent implements OnInit {
     return step.confidence < 0.75;
   }
 
+  assistantStatusLabel(message: ChatMessage): string {
+    if (message.role !== 'assistant') {
+      return '';
+    }
+
+    if (message.status === 'using-tools') {
+      return 'Using workspace tools';
+    }
+    if (message.status === 'responding') {
+      return 'Streaming response';
+    }
+    if (message.status === 'error') {
+      return 'Response interrupted';
+    }
+    if (message.status === 'thinking') {
+      return 'Reviewing case context';
+    }
+    return message.activities?.length ? 'Workspace context checked' : '';
+  }
+
+  assistantStatusIcon(message: ChatMessage): string {
+    if (message.status === 'complete') {
+      return 'check_circle';
+    }
+    if (message.status === 'error') {
+      return 'error';
+    }
+    return 'progress_activity';
+  }
+
+  isAssistantStatusLive(message: ChatMessage): boolean {
+    return (
+      message.status === 'thinking' ||
+      message.status === 'using-tools' ||
+      message.status === 'responding'
+    );
+  }
+
+  shouldShowThinking(message: ChatMessage): boolean {
+    return (
+      message.status === 'thinking' ||
+      message.status === 'using-tools' ||
+      message.status === 'responding' ||
+      message.status === 'error'
+    );
+  }
+
+  thinkingStatusLabel(message: ChatMessage): string {
+    if (message.status === 'responding') {
+      return 'Writing response';
+    }
+    if (message.status === 'error') {
+      return 'Response interrupted';
+    }
+    return 'Thinking';
+  }
+
+  toolCallStatusLabel(activity: ChatActivity): string {
+    const action = activity.status === 'completed' ? 'Called tool' : 'Calling tool';
+    return `${action}: ${this.activityLabel(activity)}`;
+  }
+
+  activityLabel(activity: ChatActivity): string {
+    const labels: Record<string, string> = {
+      list_cases: 'List cases',
+      get_case: 'Case lookup',
+      list_case_traces: 'Trace lookup',
+    };
+    return labels[activity.name] ?? this.toTitleCase(activity.name.replace(/^get_/, '').replace(/_/g, ' '));
+  }
+
+  activityDetail(activity: ChatActivity): string {
+    const metadata = this.activityMetadata(activity);
+    const details: Record<string, string> = {
+      list_cases: 'Reads available legal cases from the local registry',
+      get_case: 'Fetches detailed case data',
+      list_case_traces: 'Fetches trace records and agent steps',
+    };
+    const detail = details[activity.name] ?? 'Runs a workspace tool';
+    return metadata ? `${detail} · ${metadata}` : detail;
+  }
+
+  private activityMetadata(activity: ChatActivity): string {
+    const caseId = activity.args?.['case_id'] ?? activity.args?.['caseId'];
+    if (typeof caseId === 'string' && caseId.trim()) {
+      return `case_id: ${caseId}`;
+    }
+    const args = Object.entries(activity.args ?? {})
+      .filter(([, value]) => value !== null && value !== undefined && value !== '')
+      .map(([key, value]) => `${key}: ${String(value)}`);
+    return args.slice(0, 2).join(' · ');
+  }
+
+  renderMessageText(text: string): string {
+    return this.markdownToHtml(text);
+  }
+
+  chatSessionTitle(session: ChatSession): string {
+    return session.title || 'New chat';
+  }
+
+  chatSessionTimestamp(session: ChatSession): string {
+    return session.updatedAt || session.createdAt;
+  }
+
+  private loadChatSessions(options: { preserveActiveSession?: boolean } = {}): void {
+    this.chatSessionsLoading.set(true);
+    this.chatSessionsError.set('');
+    this.http
+      .get<ChatSession[]>(this.chatSessionsApiUrl)
+      .pipe(finalize(() => this.chatSessionsLoading.set(false)))
+      .subscribe({
+        next: (sessions) => {
+          this.chatSessions.set(sessions);
+          const activeSessionId = this.activeChatSessionId();
+          if (options.preserveActiveSession && activeSessionId) {
+            return;
+          }
+          const firstSession = sessions[0];
+          if (firstSession) {
+            this.selectChatSession(firstSession);
+          }
+        },
+        error: () => this.chatSessionsError.set('Chat history could not be loaded.'),
+      });
+  }
+
   private loadTraceability(): void {
     if (this.traceability() || this.traceabilityLoading()) {
       return;
@@ -357,6 +588,7 @@ export class CaseWorkspaceComponent implements OnInit {
   private async streamChatResponse(payload: {
     message: string;
     caseId: string;
+    sessionId: string | null;
     messages: ChatHistoryMessage[];
   }): Promise<void> {
     const response = await fetch(this.chatApiUrl, {
@@ -403,7 +635,17 @@ export class CaseWorkspaceComponent implements OnInit {
     if (streamEvent.error) {
       throw new Error(streamEvent.error);
     }
+    if (streamEvent.session) {
+      this.activeChatSessionId.set(streamEvent.session.id);
+    }
+    if (streamEvent.tool_call) {
+      this.recordToolCall(streamEvent.tool_call);
+    }
+    if (streamEvent.tool_result) {
+      this.completeToolCall(streamEvent.tool_result.name);
+    }
     if (streamEvent.content) {
+      this.setLastAssistantStatus('responding');
       this.appendToLastAssistantMessage(streamEvent.content);
     }
   }
@@ -414,6 +656,52 @@ export class CaseWorkspaceComponent implements OnInit {
 
   private replaceLastAssistantMessage(text: string): void {
     this.updateLastAssistantMessage(() => text);
+  }
+
+  private recordToolCall(toolCall: { name: string; args: Record<string, unknown> }): void {
+    this.messages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          status: 'using-tools',
+          activities: [
+            ...(lastMessage.activities ?? []),
+            { name: toolCall.name, args: toolCall.args, status: 'running' },
+          ],
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private completeToolCall(toolName: string): void {
+    this.messages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          status: lastMessage.text.trim() ? 'responding' : 'using-tools',
+          activities: (lastMessage.activities ?? []).map((activity) =>
+            activity.name === toolName ? { ...activity, status: 'completed' } : activity,
+          ),
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private setLastAssistantStatus(status: ChatMessageStatus): void {
+    this.messages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = { ...lastMessage, status };
+      }
+      return nextMessages;
+    });
   }
 
   private ensureAssistantMessageText(fallback: string): void {
@@ -444,6 +732,118 @@ export class CaseWorkspaceComponent implements OnInit {
     });
   }
 
+  private persistedToolActivities(message: PersistedChatMessage): ChatActivity[] {
+    if (message.role !== 'assistant') {
+      return [];
+    }
+
+    const toolCalls = this.asPersistedToolCalls(message.toolCalls);
+    if (!toolCalls.length) {
+      return [];
+    }
+
+    const completedToolNames = new Set(this.asPersistedToolResults(message.toolResults).map((result) => result.name));
+    return toolCalls.map((toolCall) => ({
+      name: toolCall.name,
+      args: toolCall.args,
+      status: !completedToolNames.size || completedToolNames.has(toolCall.name) ? 'completed' : 'running',
+    }));
+  }
+
+  private asPersistedToolCalls(value: unknown): PersistedToolCall[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.flatMap((item) => {
+      if (!this.isRecord(item) || typeof item['name'] !== 'string') {
+        return [];
+      }
+      const args = this.isRecord(item['args']) ? item['args'] : undefined;
+      return [{ name: item['name'], args }];
+    });
+  }
+
+  private asPersistedToolResults(value: unknown): PersistedToolResult[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.flatMap((item) => {
+      if (!this.isRecord(item) || typeof item['name'] !== 'string') {
+        return [];
+      }
+      return [{ name: item['name'] }];
+    });
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  private toTitleCase(value: string): string {
+    return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  private markdownToHtml(source: string): string {
+    const lines = source.trim().split(/\r?\n/);
+    const blocks: string[] = [];
+    let paragraphLines: string[] = [];
+    let listItems: string[] = [];
+
+    const flushParagraph = () => {
+      if (!paragraphLines.length) {
+        return;
+      }
+      blocks.push(`<p>${this.inlineMarkdown(paragraphLines.join(' '))}</p>`);
+      paragraphLines = [];
+    };
+
+    const flushList = () => {
+      if (!listItems.length) {
+        return;
+      }
+      blocks.push(`<ul>${listItems.join('')}</ul>`);
+      listItems = [];
+    };
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) {
+        flushParagraph();
+        flushList();
+        continue;
+      }
+
+      const bulletMatch = trimmedLine.match(/^[-*]\s+(.+)$/);
+      if (bulletMatch) {
+        flushParagraph();
+        listItems.push(`<li>${this.inlineMarkdown(bulletMatch[1])}</li>`);
+        continue;
+      }
+
+      flushList();
+      paragraphLines.push(trimmedLine);
+    }
+
+    flushParagraph();
+    flushList();
+    return blocks.join('');
+  }
+
+  private inlineMarkdown(source: string): string {
+    return this.escapeHtml(source).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  }
+
+  private escapeHtml(source: string): string {
+    return source
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   private toChatHistory(): ChatHistoryMessage[] {
     return this.messages()
       .filter((message) => message.text.trim())
@@ -453,5 +853,9 @@ export class CaseWorkspaceComponent implements OnInit {
   private get apiOrigin(): string {
     const hostname = window.location.hostname || 'localhost';
     return `http://${hostname}:8000`;
+  }
+
+  private chatSessionMessagesApiUrl(sessionId: string): string {
+    return `${this.apiOrigin}/api/v1/chat-sessions/${sessionId}/messages`;
   }
 }

@@ -43,11 +43,21 @@ interface TotoMessage {
   role: 'user' | 'assistant';
   text: string;
   caseId?: string;
+  status?: TotoMessageStatus;
+  activities?: TotoActivity[];
 }
 
 interface ChatHistoryMessage {
   role: 'user' | 'assistant';
   content: string;
+}
+
+type TotoMessageStatus = 'thinking' | 'using-tools' | 'responding' | 'complete' | 'error';
+
+interface TotoActivity {
+  name: string;
+  args?: Record<string, unknown>;
+  status: 'running' | 'completed';
 }
 
 interface ChatStreamEvent {
@@ -216,18 +226,120 @@ export class DashboardComponent implements OnInit {
     this.totoLoading.set(true);
     const history = this.toChatHistory();
     this.totoMessages.update((messages) => [...messages, { role: 'user', text: request, caseId }]);
-    this.totoMessages.update((messages) => [...messages, { role: 'assistant', text: '' }]);
+    this.totoMessages.update((messages) => [
+      ...messages,
+      { role: 'assistant', text: '', status: 'thinking', activities: [] },
+    ]);
     this.playTone(440, 0.025);
 
     try {
       await this.streamChatResponse({ message: request, caseId, messages: history });
       this.ensureAssistantMessageText('Toto did not return a response.');
+      this.setLastAssistantStatus('complete');
       this.playTone(660, 0.04);
     } catch {
       this.replaceLastAssistantMessage('Toto could not reach the AI chat service. Please try again.');
+      this.setLastAssistantStatus('error');
     } finally {
       this.totoLoading.set(false);
     }
+  }
+
+  assistantStatusLabel(message: TotoMessage): string {
+    if (message.role !== 'assistant') {
+      return '';
+    }
+
+    if (message.status === 'using-tools') {
+      return 'Using case tools';
+    }
+    if (message.status === 'responding') {
+      return 'Streaming response';
+    }
+    if (message.status === 'error') {
+      return 'Response interrupted';
+    }
+    if (message.status === 'thinking') {
+      return 'Reviewing context';
+    }
+    return message.activities?.length ? 'Context checked' : '';
+  }
+
+  assistantStatusIcon(message: TotoMessage): string {
+    if (message.status === 'complete') {
+      return 'check_circle';
+    }
+    if (message.status === 'error') {
+      return 'error';
+    }
+    return 'progress_activity';
+  }
+
+  isAssistantStatusLive(message: TotoMessage): boolean {
+    return (
+      message.status === 'thinking' ||
+      message.status === 'using-tools' ||
+      message.status === 'responding'
+    );
+  }
+
+  shouldShowThinking(message: TotoMessage): boolean {
+    return (
+      message.status === 'thinking' ||
+      message.status === 'using-tools' ||
+      message.status === 'responding' ||
+      message.status === 'error'
+    );
+  }
+
+  thinkingStatusLabel(message: TotoMessage): string {
+    if (message.status === 'responding') {
+      return 'Writing response';
+    }
+    if (message.status === 'error') {
+      return 'Response interrupted';
+    }
+    return 'Thinking';
+  }
+
+  toolCallStatusLabel(activity: TotoActivity): string {
+    const action = activity.status === 'completed' ? 'Called tool' : 'Calling tool';
+    return `${action}: ${this.activityLabel(activity)}`;
+  }
+
+  activityLabel(activity: TotoActivity): string {
+    const labels: Record<string, string> = {
+      list_cases: 'List cases',
+      get_case: 'Case lookup',
+      list_case_traces: 'Trace lookup',
+    };
+    return labels[activity.name] ?? this.toTitleCase(activity.name.replace(/^get_/, '').replace(/_/g, ' '));
+  }
+
+  activityDetail(activity: TotoActivity): string {
+    const metadata = this.activityMetadata(activity);
+    const details: Record<string, string> = {
+      list_cases: 'Reads available legal cases from the local registry',
+      get_case: 'Fetches detailed case data',
+      list_case_traces: 'Fetches trace records and agent steps',
+    };
+    const detail = details[activity.name] ?? 'Runs a workspace tool';
+    return metadata ? `${detail} · ${metadata}` : detail;
+  }
+
+  private activityMetadata(activity: TotoActivity): string {
+    const caseId = activity.args?.['case_id'] ?? activity.args?.['caseId'];
+    if (typeof caseId === 'string' && caseId.trim()) {
+      return `case_id: ${caseId}`;
+    }
+    const args = Object.entries(activity.args ?? {})
+      .filter(([, value]) => value !== null && value !== undefined && value !== '')
+      .map(([key, value]) => `${key}: ${String(value)}`);
+    return args.slice(0, 2).join(' · ');
+  }
+
+  renderMessageText(text: string): string {
+    return this.markdownToHtml(text);
   }
 
   private async streamChatResponse(payload: {
@@ -279,7 +391,14 @@ export class DashboardComponent implements OnInit {
     if (event.error) {
       throw new Error(event.error);
     }
+    if (event.tool_call) {
+      this.recordToolCall(event.tool_call);
+    }
+    if (event.tool_result) {
+      this.completeToolCall(event.tool_result.name);
+    }
     if (event.content) {
+      this.setLastAssistantStatus('responding');
       this.appendToLastAssistantMessage(event.content);
     }
   }
@@ -309,6 +428,52 @@ export class DashboardComponent implements OnInit {
     });
   }
 
+  private recordToolCall(toolCall: { name: string; args: Record<string, unknown> }): void {
+    this.totoMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          status: 'using-tools',
+          activities: [
+            ...(lastMessage.activities ?? []),
+            { name: toolCall.name, args: toolCall.args, status: 'running' },
+          ],
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private completeToolCall(toolName: string): void {
+    this.totoMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = {
+          ...lastMessage,
+          status: lastMessage.text.trim() ? 'responding' : 'using-tools',
+          activities: (lastMessage.activities ?? []).map((activity) =>
+            activity.name === toolName ? { ...activity, status: 'completed' } : activity,
+          ),
+        };
+      }
+      return nextMessages;
+    });
+  }
+
+  private setLastAssistantStatus(status: TotoMessageStatus): void {
+    this.totoMessages.update((messages) => {
+      const nextMessages = [...messages];
+      const lastMessage = nextMessages.at(-1);
+      if (lastMessage?.role === 'assistant') {
+        nextMessages[nextMessages.length - 1] = { ...lastMessage, status };
+      }
+      return nextMessages;
+    });
+  }
+
   private ensureAssistantMessageText(fallback: string): void {
     const lastMessage = this.totoMessages().at(-1);
     if (lastMessage?.role === 'assistant' && !lastMessage.text.trim()) {
@@ -320,6 +485,69 @@ export class DashboardComponent implements OnInit {
     return this.totoMessages()
       .filter((message) => message.text.trim())
       .map((message) => ({ role: message.role, content: message.text }));
+  }
+
+  private toTitleCase(value: string): string {
+    return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  private markdownToHtml(source: string): string {
+    const lines = source.trim().split(/\r?\n/);
+    const blocks: string[] = [];
+    let paragraphLines: string[] = [];
+    let listItems: string[] = [];
+
+    const flushParagraph = () => {
+      if (!paragraphLines.length) {
+        return;
+      }
+      blocks.push(`<p>${this.inlineMarkdown(paragraphLines.join(' '))}</p>`);
+      paragraphLines = [];
+    };
+
+    const flushList = () => {
+      if (!listItems.length) {
+        return;
+      }
+      blocks.push(`<ul>${listItems.join('')}</ul>`);
+      listItems = [];
+    };
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) {
+        flushParagraph();
+        flushList();
+        continue;
+      }
+
+      const bulletMatch = trimmedLine.match(/^[-*]\s+(.+)$/);
+      if (bulletMatch) {
+        flushParagraph();
+        listItems.push(`<li>${this.inlineMarkdown(bulletMatch[1])}</li>`);
+        continue;
+      }
+
+      flushList();
+      paragraphLines.push(trimmedLine);
+    }
+
+    flushParagraph();
+    flushList();
+    return blocks.join('');
+  }
+
+  private inlineMarkdown(source: string): string {
+    return this.escapeHtml(source).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  }
+
+  private escapeHtml(source: string): string {
+    return source
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   private playTone(frequency: number, duration: number): void {

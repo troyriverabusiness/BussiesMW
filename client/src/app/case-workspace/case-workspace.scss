@@ -197,6 +197,13 @@
   gap: 8px;
 }
 
+.chat-history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .chat-history h2 {
   margin: 0;
   padding: 0 4px;
@@ -206,6 +213,19 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.chat-history .new-chat-button {
+  display: inline-flex;
+  width: auto;
+  min-height: 32px;
+  padding: 0 9px;
+  gap: 5px;
+  font-size: 0.78rem;
+}
+
+.chat-history .new-chat-button span {
+  display: inline;
 }
 
 .chat-history button {
@@ -219,6 +239,11 @@
   color: #3f3f46;
   cursor: pointer;
   text-align: left;
+}
+
+.chat-history button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .chat-history button.active {
@@ -254,6 +279,17 @@
   color: #a1a1aa;
   font-size: 0.72rem;
   white-space: nowrap;
+}
+
+.chat-history-state {
+  margin: 4px;
+  color: #71717a;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.chat-history-state.error {
+  color: #b91c1c;
 }
 
 .overview-panel {
@@ -512,6 +548,97 @@
 .message p {
   margin: 0;
   line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.message-content {
+  color: inherit;
+  line-height: 1.6;
+}
+
+:host ::ng-deep .message-content p {
+  margin: 0;
+}
+
+:host ::ng-deep .message-content p + p,
+:host ::ng-deep .message-content p + ul,
+:host ::ng-deep .message-content ul + p {
+  margin-top: 14px;
+}
+
+:host ::ng-deep .message-content ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+:host ::ng-deep .message-content li {
+  padding-left: 2px;
+}
+
+:host ::ng-deep .message-content strong {
+  font-weight: 750;
+}
+
+.thinking-card,
+.tool-call-card {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(620px, 78%);
+  padding: 0 2px;
+  color: #52525b;
+}
+
+.thinking-card {
+  width: max-content;
+}
+
+.tool-call-card.complete {
+  color: #3f3f46;
+}
+
+.message-status,
+.tool-call-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.message-status {
+  min-height: 22px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.message-status .material-symbols-rounded,
+.tool-call-card .message-status .material-symbols-rounded {
+  color: #71717a;
+  font-size: 1rem;
+}
+
+.thinking-card.live .message-status .material-symbols-rounded,
+.tool-call-card.live .message-status .material-symbols-rounded {
+  animation: activity-spin 900ms linear infinite;
+}
+
+.tool-call-body {
+  min-width: 0;
+  min-height: 22px;
+  font-size: 0.76rem;
+}
+
+.tool-call-card.complete .message-status .material-symbols-rounded {
+  color: #15803d;
+}
+
+.tool-call-body span {
+  color: #71717a;
+  font-size: 0.72rem;
+  line-height: 1.45;
 }
 
 .message dl {
@@ -581,6 +708,12 @@
   min-width: 0;
   overflow: auto;
   background: #fafafa;
+}
+
+@keyframes activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .traceability-header {

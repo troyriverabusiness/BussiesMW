@@ -203,24 +203,51 @@
           <p>Ask Toto a question or choose a case row to start a live AI chat.</p>
         </article>
       }
-      <article
-        *ngFor="let message of totoMessages()"
-        class="toto-message"
-        [class.user]="message.role === 'user'"
-      >
-        <p>{{ message.text }}</p>
-        @if (message.caseId) {
-          <div class="case-reference">
-            <span>Internal case ID</span>
-            <code>{{ message.caseId }}</code>
-          </div>
+      <ng-container *ngFor="let message of totoMessages()">
+        @if (message.role === 'user') {
+          <article class="toto-message user">
+            <p>{{ message.text }}</p>
+            @if (message.caseId) {
+              <div class="case-reference">
+                <span>Internal case ID</span>
+                <code>{{ message.caseId }}</code>
+              </div>
+            }
+          </article>
+        } @else {
+          @if (shouldShowThinking(message)) {
+            <article class="thinking-card" [class.live]="isAssistantStatusLive(message)">
+              <div class="message-status">
+                <span class="material-symbols-rounded" aria-hidden="true">
+                  {{ assistantStatusIcon(message) }}
+                </span>
+                <span>{{ thinkingStatusLabel(message) }}</span>
+              </div>
+            </article>
+          }
+          <article
+            *ngFor="let activity of message.activities"
+            class="tool-call-card"
+            [class.complete]="activity.status === 'completed'"
+            [class.live]="activity.status === 'running'"
+          >
+            <div class="message-status">
+              <span class="material-symbols-rounded" aria-hidden="true">
+                {{ activity.status === 'completed' ? 'check_circle' : 'build_circle' }}
+              </span>
+              <span>{{ toolCallStatusLabel(activity) }}</span>
+            </div>
+            <div class="tool-call-body">
+              <span>{{ activityDetail(activity) }}</span>
+            </div>
+          </article>
+          @if (message.text.trim()) {
+            <article class="toto-message">
+              <div class="message-content" [innerHTML]="renderMessageText(message.text)"></div>
+            </article>
+          }
         }
-      </article>
-      @if (totoLoading()) {
-        <article class="toto-message">
-          <p>Toto is checking the orchestration record...</p>
-        </article>
-      }
+      </ng-container>
     </div>
 
     <form class="toto-input" (submit)="sendTotoDraft($event)">

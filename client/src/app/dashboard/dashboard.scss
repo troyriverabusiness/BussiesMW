@@ -347,6 +347,94 @@ h2 {
   color: #283244;
   font-size: 0.9rem;
   line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.message-content {
+  color: #283244;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+:host ::ng-deep .message-content p {
+  margin: 0;
+}
+
+:host ::ng-deep .message-content p + p,
+:host ::ng-deep .message-content p + ul,
+:host ::ng-deep .message-content ul + p {
+  margin-top: 12px;
+}
+
+:host ::ng-deep .message-content ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+:host ::ng-deep .message-content li {
+  padding-left: 2px;
+}
+
+:host ::ng-deep .message-content strong {
+  font-weight: 780;
+}
+
+.thinking-card,
+.tool-call-card {
+  display: flex;
+  align-items: center;
+  width: min(100%, 360px);
+  gap: 9px;
+  padding: 0 2px;
+  color: #5f6b7c;
+}
+
+.thinking-card {
+  width: max-content;
+}
+
+.message-status,
+.tool-call-body {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.message-status {
+  min-height: 22px;
+  font-size: 0.76rem;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.message-status .material-symbols-rounded,
+.tool-call-card .message-status .material-symbols-rounded {
+  color: #7a8494;
+  font-size: 1rem;
+}
+
+.thinking-card.live .message-status .material-symbols-rounded,
+.tool-call-card.live .message-status .material-symbols-rounded {
+  animation: activity-spin 900ms linear infinite;
+}
+
+.tool-call-body {
+  min-width: 0;
+  min-height: 22px;
+  color: #3f4a5c;
+  font-size: 0.75rem;
+}
+
+.tool-call-card.complete .message-status .material-symbols-rounded {
+  color: #15803d;
+}
+
+.tool-call-body span {
+  color: #6b7280;
+  font-size: 0.7rem;
+  line-height: 1.4;
 }
 
 .case-reference {
@@ -789,5 +877,11 @@ tbody tr.recent-row {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes activity-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
