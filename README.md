@@ -15,6 +15,24 @@ This creates a clear business problem:
 - Case knowledge is scattered across documents, notes, systems, and people.
 - Quality, transparency, and traceability become harder as matter volume grows.
 
+## Automated Intake and Routing
+
+Before a lawyer ever opens a case workspace, Veritas runs a structured intake and routing pipeline built in n8n. This is the first major half of the solution: the work that happens between a legal request arriving and a case being ready for lawyer assignment.
+
+**Workflow 1 — Intake, Classification, and Routing**
+
+An incoming legal request is picked up, a case object is initialised, and a Classifier and Router Agent classifies the matter type and determines the appropriate routing path. Each classification step is appended to the case trace. The workflow then checks whether the request needs clarification before proceeding, and if it is ready it hands off to the relevant department workflow.
+
+![Intake, classification, and routing workflow](images/Screenshot%202026-04-26%20at%2011.26.53.png)
+
+**Workflow 2 — Department Validation, Issue Validation, Escalation, and Case Prep**
+
+Once routed, the case goes through department and issue validation using dedicated AI agents. Internal documents are searched to validate the issue. The workflow checks whether the matter needs escalation, routes it to the correct department, and then runs a case prep step that assembles the structured case record. Finally it writes the case, trace, and trace stages to Supabase, making the matter ready for a lawyer to pick up in the case workspace.
+
+![Department validation, issue validation, escalation, and case prep workflow](images/Screenshot%202026-04-26%20at%2011.27.47.png)
+
+Together these two workflows handle everything before lawyer assignment: intake, classification, validation, escalation logic, and structured case creation. The case workspace, agent chat, and document flows described below are the second half, where the lawyer and the AI agents work on the matter together.
+
 ## The Veritas Approach
 
 Veritas turns legal work into an orchestrated agent workflow. A lawyer can work from a case workspace, ask questions, request analysis, generate documents, review traceability, contact internal stakeholders, and prepare external communication with approval controls.
